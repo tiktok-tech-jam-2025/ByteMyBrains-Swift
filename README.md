@@ -5,7 +5,7 @@ Improve the user experience of finding and selecting assets by using the Photos 
 ## Overview
 This sample shows how to use the [`PhotoKit`][10] Photos picker, and illustrates how to filter assets according to the user's selection. After you have a selection, you use an item provider to load the asset to display in the app. The sample also explores the new configuration options in iOS 15. 
 
-- Note: This sample code project is associated with WWDC21 session [10046: Improve access to Photos in your app](https://developer.apple.com/videos/play/wwdc21/10046/).
+- Note: This sample code project is associated with WWDC21 session [10046: Improve access to Photos in your app](https://developer.apple.com/videos/play/wwdc2021/10046/).
 
 ## Understand the Photos Picker Benefits 
 Both [`PHPickerViewController`][7] and [`UIImagePickerController`][8] use the out-of-process Photos picker user interface. The `PHPickerViewController` contains a powerful set of APIs that make it a great alternative to `UIImagePickerController`. `PHPickerViewController` improves stability and reliability, and includes several benefits to developers and users, such as the following:
@@ -25,7 +25,6 @@ Before displaying the photo library, the sample creates a [`PHPickerConfiguratio
 ``` swift
 var configuration = PHPickerConfiguration(photoLibrary: .shared())
 ```
-[View in Source][13]
 
 The picker displays all asset types by default. A filter configures the picker to display videos, images with live photos, or live photos only. The sample contains three buttons that reflect the available filter types. 
 
@@ -51,7 +50,6 @@ configuration.selectionLimit = 0
 // Set the preselected asset identifiers with the identifiers that the app tracks.
 configuration.preselectedAssetIdentifiers = selectedAssetIdentifiers
 ```
-[View in Source][13]
 
 ## Display a Picker with the Configuration
 The sample creates and displays the picker using the configuration object. Displaying the photo library doesn't need user permission because it's running in a separate process. An app can't take screenshots of content and can only read the assets that the user selects. 
@@ -61,7 +59,6 @@ let picker = PHPickerViewController(configuration: configuration)
 picker.delegate = self
 present(picker, animated: true)
 ```
-[View in Source][13]
 
 Apps are responsible for presenting and dismissing the photo library. The sample adopts to the photo library delegate that notifies the app when the user cancels the flow. 
 
@@ -92,7 +89,6 @@ if selection.isEmpty {
     displayNext()
 }
 ```
-[View in Source][5]
 
 
 ## Fetch Selected Asset Data for Display
@@ -114,7 +110,6 @@ if itemProvider.canLoadObject(ofClass: PHLivePhoto.self) {
     }
 }
 ```
-[View in Source][6]
 
 
 ## Load Asset Metadata
@@ -134,16 +129,10 @@ if itemProvider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
 }
 ```
 
-[1]: https://developer.apple.com/documentation/photokit/delivering_a_great_privacy_experience_in_your_photos_app
-[2]: x-source-tag://CreatePickerConfiguration
-[3]: x-source-tag://ConfigurePicker
-[4]: x-source-tag://CreatePickerController
-[5]: x-source-tag://ParsePickerResults
-[6]: x-source-tag://LoadItemProvider
-[7]: https://developer.apple.com/documentation/photokit/phpickerviewcontroller
+[1]: https://developer.apple.com/documentation/photokit/delivering-an-enhanced-privacy-experience-in-your-photos-app
+[7]: https://developer.apple.com/documentation/photosui/phpickerviewcontroller
 [8]: https://developer.apple.com/documentation/uikit/uiimagepickercontroller
-[9]: https://developer.apple.com/documentation/photokit/phlivephoto
+[9]: https://developer.apple.com/documentation/photos/phlivephoto
 [10]: https://developer.apple.com/documentation/photokit
-[11]: https://developer.apple.com/documentation/photokit/phpickerconfiguration
+[11]: https://developer.apple.com/documentation/photosui/phpickerconfiguration-swift.struct
 [12]: https://developer.apple.com/documentation/foundation/progress
-[13]: x-source-tag://PresentPicker

@@ -1,5 +1,5 @@
 /*
-See LICENSE folder for this sample’s licensing information.
+See the LICENSE.txt file for this sample’s licensing information.
 
 Abstract:
 The app's main view controller object.
@@ -38,7 +38,6 @@ class ViewController: UIViewController {
         presentPicker(filter: PHPickerFilter.livePhotos)
     }
     
-    /// - Tag: PresentPicker
     private func presentPicker(filter: PHPickerFilter?) {
         var configuration = PHPickerConfiguration(photoLibrary: .shared())
         
@@ -72,7 +71,6 @@ class ViewController: UIViewController {
 
 private extension ViewController {
     
-    /// - Tag: LoadItemProvider
     func displayNext() {
         guard let assetIdentifier = selectedAssetIdentifierIterator?.next() else { return }
         currentAssetIdentifier = assetIdentifier
@@ -196,7 +194,6 @@ private extension ViewController {
 }
 
 extension ViewController: PHPickerViewControllerDelegate {
-    /// - Tag: ParsePickerResults
     func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         dismiss(animated: true)
         
