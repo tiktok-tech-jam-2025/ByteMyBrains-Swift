@@ -13,6 +13,7 @@
 		261C3FB02481C140005A1EFD /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 261C3FAE2481C140005A1EFD /* Main.storyboard */; };
 		261C3FB22481C141005A1EFD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 261C3FB12481C141005A1EFD /* Assets.xcassets */; };
 		261C3FB52481C141005A1EFD /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 261C3FB32481C141005A1EFD /* LaunchScreen.storyboard */; };
+		A77AECDF2E61727700AE5CD0 /* OCRProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77AECDE2E61727700AE5CD0 /* OCRProcessor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -24,9 +25,10 @@
 		261C3FB12481C141005A1EFD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		261C3FB42481C141005A1EFD /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		261C3FB62481C141005A1EFD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		55E258A9AA24CB9B28978F83 /* LICENSE.txt */ = {isa = PBXFileReference; includeInIndex = 1; path = LICENSE.txt; sourceTree = "<group>"; };
+		55E258A9AA24CB9B28978F83 /* LICENSE.txt */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = LICENSE.txt; sourceTree = "<group>"; };
+		A77AECDE2E61727700AE5CD0 /* OCRProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRProcessor.swift; sourceTree = "<group>"; };
 		B0469A2CDC8F91A0264F220C /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
-		D0D1E72DF0C2B42E1393B543 /* SampleCode.xcconfig */ = {isa = PBXFileReference; name = SampleCode.xcconfig; path = Configuration/SampleCode.xcconfig; sourceTree = "<group>"; };
+		D0D1E72DF0C2B42E1393B543 /* SampleCode.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = SampleCode.xcconfig; path = Configuration/SampleCode.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -65,6 +67,7 @@
 				261C3FA82481C140005A1EFD /* AppDelegate.swift */,
 				261C3FAA2481C140005A1EFD /* SceneDelegate.swift */,
 				261C3FAC2481C140005A1EFD /* ViewController.swift */,
+				A77AECDE2E61727700AE5CD0 /* OCRProcessor.swift */,
 				261C3FAE2481C140005A1EFD /* Main.storyboard */,
 				261C3FB12481C141005A1EFD /* Assets.xcassets */,
 				261C3FB32481C141005A1EFD /* LaunchScreen.storyboard */,
@@ -87,7 +90,6 @@
 				55E258A9AA24CB9B28978F83 /* LICENSE.txt */,
 			);
 			name = LICENSE;
-			path = "";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -162,6 +164,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				261C3FAD2481C140005A1EFD /* ViewController.swift in Sources */,
+				A77AECDF2E61727700AE5CD0 /* OCRProcessor.swift in Sources */,
 				261C3FA92481C140005A1EFD /* AppDelegate.swift in Sources */,
 				261C3FAB2481C140005A1EFD /* SceneDelegate.swift in Sources */,
 			);

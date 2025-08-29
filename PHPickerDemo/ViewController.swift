@@ -19,6 +19,7 @@ class ViewController: UIViewController {
         }
     }
     @IBOutlet weak var playButton: UIButton!
+    @IBOutlet weak var ocrButton: UIButton!
     private var playButtonVideoURL: URL?
 
     private var selection = [String: PHPickerResult]()
@@ -26,6 +27,44 @@ class ViewController: UIViewController {
     private var selectedAssetIdentifierIterator: IndexingIterator<[String]>?
     private var currentAssetIdentifier: String?
     
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        // Debug: Check if OCR button is connected
+        if ocrButton != nil {
+            print("✅ OCR Button is connected")
+            ocrButton.isHidden = false  // Initially hide it until images are selected
+        } else {
+            print("❌ OCR Button is NOT connected - check storyboard connection")
+        }
+    }
+    
+    @IBAction func runOCROnSelectedImages(_ sender: UIButton) {
+        print("🔘 OCR Button clicked!")
+        print("📸 Selection count: \(selection.count)")
+        print("📋 Selection contents: \(Array(selection.keys))")
+        
+        guard !selection.isEmpty else {
+            print("❌ No images selected, showing alert")
+            showAlert(title: "No Images", message: "Please select at least one image before running OCR.")
+            return
+        }
+        
+        print("✅ Images found, starting OCR processing...")
+        
+        ocrButton.isEnabled = false
+        ocrButton.setTitle("Processing...", for: .disabled)
+        print("🔄 Button disabled and title changed")
+        
+        let processor = OCRProcessor()
+        processor.delegate = self
+        print("🏭 OCR Processor created, delegate set")
+        
+        print("🚀 About to call processImages...")
+        processor.processImages(from: selection)
+        print("📤 processImages called")
+    }
+
     @IBAction func presentPickerForImagesAndVideos(_ sender: Any) {
         presentPicker(filter: nil)
     }
@@ -214,5 +253,131 @@ extension ViewController: PHPickerViewControllerDelegate {
         } else {
             displayNext()
         }
+    }
+}
+
+// MARK: - OCR Integration Extension
+// Add this to the end of your ViewController.swift file
+
+extension ViewController: OCRProcessorDelegate {
+    
+    private var ocrProcessor: OCRProcessor {
+        return OCRProcessor()
+    }
+    
+    // MARK: - OCRProcessorDelegate Methods
+    
+    func ocrProcessor(_ processor: OCRProcessor, didStartProcessing totalImages: Int) {
+        print("🎬 OCR DELEGATE: didStartProcessing called with \(totalImages) images")
+        DispatchQueue.main.async {
+            print("🎬 OCR DELEGATE: On main thread - starting processing UI update")
+            self.progressView.isHidden = false
+            self.progressView.progress = 0.0
+            print("🎬 OCR DELEGATE: Progress view shown and reset")
+        }
+    }
+    
+    func ocrProcessor(_ processor: OCRProcessor, didProcessImage at: Int, of total: Int) {
+        print("📊 OCR DELEGATE: didProcessImage called - \(at) of \(total)")
+        DispatchQueue.main.async {
+            self.progressView.progress = Float(at) / Float(total)
+            print("📊 OCR DELEGATE: Progress updated to \(Float(at) / Float(total))")
+        }
+    }
+    
+    func ocrProcessor(_ processor: OCRProcessor, didCompleteWithResults results: [OCRResult]) {
+        print("✅ OCR DELEGATE: didCompleteWithResults called with \(results.count) results")
+        DispatchQueue.main.async {
+            print("✅ OCR DELEGATE: On main thread - completing processing")
+            self.progressView.isHidden = true
+            self.handleOCRResults(results)
+            self.enableOCRButton()
+            print("✅ OCR DELEGATE: Processing complete, button re-enabled")
+        }
+    }
+    
+    func ocrProcessor(_ processor: OCRProcessor, didFailWithError error: Error) {
+        print("❌ OCR DELEGATE: didFailWithError called - \(error.localizedDescription)")
+        DispatchQueue.main.async {
+            print("❌ OCR DELEGATE: On main thread - handling error")
+            self.progressView.isHidden = true
+            self.showAlert(title: "OCR Error", message: error.localizedDescription)
+            self.enableOCRButton()
+            print("❌ OCR DELEGATE: Error handled, button re-enabled")
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func enableOCRButton() {
+        print("🔄 Enabling OCR button")
+        ocrButton.isEnabled = true
+        ocrButton.setTitle("Run OCR", for: .normal)
+        print("🔄 OCR button enabled and title reset")
+    }
+    
+    private func handleOCRResults(_ results: [OCRResult]) {
+        print("📊 Handling OCR results - \(results.count) results")
+        
+        var allTextBoxes: [TextBoundingBox] = []
+        var totalProcessingTime: TimeInterval = 0
+        var errorCount = 0
+        var totalTextFound = 0
+        
+        for (index, result) in results.enumerated() {
+            print("📋 Processing result \(index + 1)/\(results.count) for asset: \(result.assetIdentifier)")
+            
+            if let error = result.error {
+                print("❌ OCR error for \(result.assetIdentifier): \(error.localizedDescription)")
+                errorCount += 1
+            } else {
+                allTextBoxes.append(contentsOf: result.textBoxes)
+                totalProcessingTime += result.processingTime
+                totalTextFound += result.textBoxes.count
+                
+                print("✅ OCR completed for \(result.assetIdentifier):")
+                print("   📝 Found \(result.textBoxes.count) text regions")
+                print("   ⏱️ Processing time: \(String(format: "%.2f", result.processingTime))s")
+                
+                for (textIndex, textBox) in result.textBoxes.enumerated() {
+                    print("   📄 Text \(textIndex + 1): '\(textBox.text)' (confidence: \(String(format: "%.2f", textBox.confidence)))")
+                    print("   📍 Bounding box: \(textBox.boundingBox)")
+                }
+            }
+        }
+        
+        let message = """
+        OCR Processing Complete!
+        
+        Images processed: \(results.count)
+        Text regions found: \(totalTextFound)
+        Total processing time: \(String(format: "%.2f", totalProcessingTime))s
+        Average time per image: \(String(format: "%.2f", totalProcessingTime / Double(results.count)))s
+        Errors: \(errorCount)
+        """
+        
+        print("🎉 Final OCR Summary:")
+        print(message)
+        
+        showAlert(title: "OCR Results", message: message)
+        
+        // Optional: Display detailed results
+        displayDetailedOCRResults(allTextBoxes)
+    }
+    
+    private func displayDetailedOCRResults(_ textBoxes: [TextBoundingBox]) {
+        // Print all extracted text for debugging
+        print("\n=== ALL EXTRACTED TEXT ===")
+        for (index, textBox) in textBoxes.enumerated() {
+            print("\(index + 1). \"\(textBox.text)\" (confidence: \(String(format: "%.2f", textBox.confidence)))")
+        }
+        print("========================\n")
+    }
+    
+    private func showAlert(title: String, message: String) {
+        print("🚨 Showing alert: \(title) - \(message)")
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 }
