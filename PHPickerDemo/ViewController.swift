@@ -292,7 +292,7 @@ extension ViewController: OCRProcessorDelegate {
             self.handleOCRResults(results)
             self.enableOCRButton()
             
-            // ADD THIS - Clear the processor when done
+            // Clear the processor when done
             self.ocrProcessor = nil
             print("✅ OCR DELEGATE: Processing complete, button re-enabled")
         }
@@ -364,10 +364,16 @@ extension ViewController: OCRProcessorDelegate {
         print("🎉 Final OCR Summary:")
         print(message)
         
-        showAlert(title: "OCR Results", message: message)
+        // Show results alert with option to view visualization
+        let alert = UIAlertController(title: "OCR Results", message: message, preferredStyle: .alert)
+       
+        alert.addAction(UIAlertAction(title: "View Visualization", style: .default) { _ in
+            self.showOCRVisualization(for: results)
+        })
+       
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
         
-        // Optional: Display detailed results
-        displayDetailedOCRResults(allTextBoxes)
+        present(alert, animated: true)
     }
     
     private func displayDetailedOCRResults(_ textBoxes: [TextBoundingBox]) {
@@ -384,5 +390,15 @@ extension ViewController: OCRProcessorDelegate {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
+    }
+    
+    private func showOCRVisualization(for results: [OCRResult]) {
+        let visualizationVC = OCRVisualizationViewController()
+        visualizationVC.ocrResults = results
+        visualizationVC.selection = selection
+        
+        let navController = UINavigationController(rootViewController: visualizationVC)
+        navController.modalPresentationStyle = .fullScreen
+        present(navController, animated: true)
     }
 }

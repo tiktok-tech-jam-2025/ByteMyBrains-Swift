@@ -14,6 +14,7 @@
 		261C3FB22481C141005A1EFD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 261C3FB12481C141005A1EFD /* Assets.xcassets */; };
 		261C3FB52481C141005A1EFD /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 261C3FB32481C141005A1EFD /* LaunchScreen.storyboard */; };
 		A77AECDF2E61727700AE5CD0 /* OCRProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77AECDE2E61727700AE5CD0 /* OCRProcessor.swift */; };
+		A77AECE12E61906A00AE5CD0 /* OCRVisualizationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77AECE02E61906A00AE5CD0 /* OCRVisualizationViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,6 +28,7 @@
 		261C3FB62481C141005A1EFD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		55E258A9AA24CB9B28978F83 /* LICENSE.txt */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = LICENSE.txt; sourceTree = "<group>"; };
 		A77AECDE2E61727700AE5CD0 /* OCRProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRProcessor.swift; sourceTree = "<group>"; };
+		A77AECE02E61906A00AE5CD0 /* OCRVisualizationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRVisualizationViewController.swift; sourceTree = "<group>"; };
 		B0469A2CDC8F91A0264F220C /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		D0D1E72DF0C2B42E1393B543 /* SampleCode.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = SampleCode.xcconfig; path = Configuration/SampleCode.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -68,6 +70,7 @@
 				261C3FAA2481C140005A1EFD /* SceneDelegate.swift */,
 				261C3FAC2481C140005A1EFD /* ViewController.swift */,
 				A77AECDE2E61727700AE5CD0 /* OCRProcessor.swift */,
+				A77AECE02E61906A00AE5CD0 /* OCRVisualizationViewController.swift */,
 				261C3FAE2481C140005A1EFD /* Main.storyboard */,
 				261C3FB12481C141005A1EFD /* Assets.xcassets */,
 				261C3FB32481C141005A1EFD /* LaunchScreen.storyboard */,
@@ -165,6 +168,7 @@
 			files = (
 				261C3FAD2481C140005A1EFD /* ViewController.swift in Sources */,
 				A77AECDF2E61727700AE5CD0 /* OCRProcessor.swift in Sources */,
+				A77AECE12E61906A00AE5CD0 /* OCRVisualizationViewController.swift in Sources */,
 				261C3FA92481C140005A1EFD /* AppDelegate.swift in Sources */,
 				261C3FAB2481C140005A1EFD /* SceneDelegate.swift in Sources */,
 			);
