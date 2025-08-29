@@ -27,6 +27,9 @@ class ViewController: UIViewController {
     private var selectedAssetIdentifierIterator: IndexingIterator<[String]>?
     private var currentAssetIdentifier: String?
     
+    // Store OCRProcessor as a property
+    private var ocrProcessor: OCRProcessor?
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         
@@ -56,12 +59,12 @@ class ViewController: UIViewController {
         ocrButton.setTitle("Processing...", for: .disabled)
         print("🔄 Button disabled and title changed")
         
-        let processor = OCRProcessor()
-        processor.delegate = self
+        ocrProcessor = OCRProcessor()
+        ocrProcessor?.delegate = self
         print("🏭 OCR Processor created, delegate set")
         
         print("🚀 About to call processImages...")
-        processor.processImages(from: selection)
+        ocrProcessor?.processImages(from: selection)
         print("📤 processImages called")
     }
 
@@ -261,10 +264,6 @@ extension ViewController: PHPickerViewControllerDelegate {
 
 extension ViewController: OCRProcessorDelegate {
     
-    private var ocrProcessor: OCRProcessor {
-        return OCRProcessor()
-    }
-    
     // MARK: - OCRProcessorDelegate Methods
     
     func ocrProcessor(_ processor: OCRProcessor, didStartProcessing totalImages: Int) {
@@ -292,6 +291,9 @@ extension ViewController: OCRProcessorDelegate {
             self.progressView.isHidden = true
             self.handleOCRResults(results)
             self.enableOCRButton()
+            
+            // ADD THIS - Clear the processor when done
+            self.ocrProcessor = nil
             print("✅ OCR DELEGATE: Processing complete, button re-enabled")
         }
     }
@@ -303,6 +305,9 @@ extension ViewController: OCRProcessorDelegate {
             self.progressView.isHidden = true
             self.showAlert(title: "OCR Error", message: error.localizedDescription)
             self.enableOCRButton()
+            
+            // ADD THIS - Clear the processor when error occurs
+            self.ocrProcessor = nil
             print("❌ OCR DELEGATE: Error handled, button re-enabled")
         }
     }

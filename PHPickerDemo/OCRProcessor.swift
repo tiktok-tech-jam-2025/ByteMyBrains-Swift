@@ -125,57 +125,138 @@ class OCRProcessor {
         }
     }
     
+//    private func loadImageAndProcess(pickerResult: PHPickerResult, identifier: String, completion: @escaping (OCRResult) -> Void) {
+//        let itemProvider = pickerResult.itemProvider
+//        
+//        guard itemProvider.canLoadObject(ofClass: UIImage.self) else {
+//            let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: OCRError.unsupportedImageType)
+//            completion(result)
+//            return
+//        }
+//        
+//        itemProvider.loadObject(ofClass: UIImage.self) { [weak self] (image: NSItemProviderReading?, error: Error?) in
+//            guard let self = self else { return }
+//            
+//            if let error = error {
+//                let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: error)
+//                completion(result)
+//                return
+//            }
+//            
+//            guard let uiImage = image as? UIImage else {
+//                let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: OCRError.failedToLoadImage)
+//                completion(result)
+//                return
+//            }
+//            
+//            self.performOCR(on: uiImage, identifier: identifier, completion: completion)
+//        }
+//    }
     private func loadImageAndProcess(pickerResult: PHPickerResult, identifier: String, completion: @escaping (OCRResult) -> Void) {
+        print("🔄 loadImageAndProcess called for \(identifier)")
         let itemProvider = pickerResult.itemProvider
         
+        print("📋 ItemProvider registered types: \(itemProvider.registeredTypeIdentifiers)")
+        
         guard itemProvider.canLoadObject(ofClass: UIImage.self) else {
+            print("❌ ItemProvider cannot load UIImage for \(identifier)")
             let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: OCRError.unsupportedImageType)
             completion(result)
             return
         }
         
+        print("✅ ItemProvider can load UIImage, starting load for \(identifier)")
+        
         itemProvider.loadObject(ofClass: UIImage.self) { [weak self] (image: NSItemProviderReading?, error: Error?) in
-            guard let self = self else { return }
+            print("📥 loadObject completion called for \(identifier)")
+            
+            guard let self = self else {
+                print("❌ Self is nil in loadObject completion for \(identifier)")
+                return
+            }
             
             if let error = error {
+                print("❌ Error loading image for \(identifier): \(error)")
                 let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: error)
                 completion(result)
                 return
             }
             
             guard let uiImage = image as? UIImage else {
+                print("❌ Could not cast loaded object to UIImage for \(identifier)")
                 let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: OCRError.failedToLoadImage)
                 completion(result)
                 return
             }
             
+            print("✅ Successfully loaded UIImage for \(identifier): \(uiImage.size)")
             self.performOCR(on: uiImage, identifier: identifier, completion: completion)
         }
     }
     
+//    private func performOCR(on image: UIImage, identifier: String, completion: @escaping (OCRResult) -> Void) {
+//        guard let cgImage = image.cgImage else {
+//            let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: OCRError.failedToProcessImage)
+//            completion(result)
+//            return
+//        }
+//        
+//        let startTime = CFAbsoluteTimeGetCurrent()
+//        
+//        // Create text recognition request
+//        let request = VNRecognizeTextRequest { [weak self] request, error in
+//            self?.handleTextRecognitionResults(request: request, error: error, identifier: identifier, startTime: startTime, completion: completion)
+//        }
+//        
+//        // Configure the request based on the current configuration
+//        configureRequest(request, with: configuration)
+//        
+//        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+//        
+//        DispatchQueue.global(qos: .userInitiated).async {
+//            do {
+//                try handler.perform([request])
+//            } catch {
+//                let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: error)
+//                completion(result)
+//            }
+//        }
+//    }
     private func performOCR(on image: UIImage, identifier: String, completion: @escaping (OCRResult) -> Void) {
+        print("🔍 performOCR called for \(identifier)")
+        print("📸 Image size: \(image.size)")
+        
         guard let cgImage = image.cgImage else {
+            print("❌ Could not get cgImage from UIImage")
             let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: OCRError.failedToProcessImage)
             completion(result)
             return
         }
         
+        print("✅ Got cgImage: \(cgImage.width)x\(cgImage.height)")
+        
         let startTime = CFAbsoluteTimeGetCurrent()
         
         // Create text recognition request
         let request = VNRecognizeTextRequest { [weak self] request, error in
+            print("🎯 VNRecognizeTextRequest completion block called for \(identifier)")
             self?.handleTextRecognitionResults(request: request, error: error, identifier: identifier, startTime: startTime, completion: completion)
         }
         
         // Configure the request based on the current configuration
         configureRequest(request, with: configuration)
+        print("⚙️ Request configured with \(configuration)")
         
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        print("🎯 Created VNImageRequestHandler")
         
         DispatchQueue.global(qos: .userInitiated).async {
+            print("🚀 About to perform Vision request for \(identifier)")
             do {
                 try handler.perform([request])
+                print("✅ Vision request completed successfully for \(identifier)")
             } catch {
+                print("❌ Vision request failed for \(identifier): \(error)")
                 let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: error)
                 completion(result)
             }
@@ -204,26 +285,77 @@ class OCRProcessor {
         }
     }
     
+//    private func handleTextRecognitionResults(request: VNRequest, error: Error?, identifier: String, startTime: CFAbsoluteTime, completion: @escaping (OCRResult) -> Void) {
+//        let processingTime = CFAbsoluteTimeGetCurrent() - startTime
+//        
+//        if let error = error {
+//            let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: processingTime, error: error)
+//            completion(result)
+//            return
+//        }
+//        
+//        guard let observations = request.results as? [VNRecognizedTextObservation] else {
+//            let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: processingTime, error: OCRError.failedToProcessImage)
+//            completion(result)
+//            return
+//        }
+//        
+//        var textBoxes: [TextBoundingBox] = []
+//        
+//        for observation in observations {
+//            // Get the top candidate for recognized text
+//            guard let topCandidate = observation.topCandidates(1).first else { continue }
+//            
+//            // Create bounding box with the recognized text
+//            let textBox = TextBoundingBox(
+//                text: topCandidate.string,
+//                boundingBox: observation.boundingBox,
+//                confidence: topCandidate.confidence,
+//                assetIdentifier: identifier
+//            )
+//            textBoxes.append(textBox)
+//        }
+//        
+//        let result = OCRResult(assetIdentifier: identifier, textBoxes: textBoxes, processingTime: processingTime, error: nil)
+//        completion(result)
+//    }
     private func handleTextRecognitionResults(request: VNRequest, error: Error?, identifier: String, startTime: CFAbsoluteTime, completion: @escaping (OCRResult) -> Void) {
+        print("🔍 handleTextRecognitionResults called for \(identifier)")
         let processingTime = CFAbsoluteTimeGetCurrent() - startTime
+        print("⏱️ Processing time: \(processingTime)s")
         
         if let error = error {
+            print("❌ OCR Error in handleTextRecognitionResults: \(error)")
             let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: processingTime, error: error)
             completion(result)
             return
         }
         
+        print("📊 Request results type: \(type(of: request.results))")
+        print("📊 Request results count: \(request.results?.count ?? -1)")
+        
         guard let observations = request.results as? [VNRecognizedTextObservation] else {
+            print("❌ Could not cast request.results to [VNRecognizedTextObservation]")
+            print("📋 Actual results: \(request.results?.description ?? "nil")")
             let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: processingTime, error: OCRError.failedToProcessImage)
             completion(result)
             return
         }
         
+        print("✅ Got \(observations.count) VNRecognizedTextObservation objects")
+        
         var textBoxes: [TextBoundingBox] = []
         
-        for observation in observations {
+        for (index, observation) in observations.enumerated() {
+            print("📝 Processing observation \(index + 1) of \(observations.count)")
+            
             // Get the top candidate for recognized text
-            guard let topCandidate = observation.topCandidates(1).first else { continue }
+            guard let topCandidate = observation.topCandidates(1).first else {
+                print("⚠️ No top candidate for observation \(index + 1)")
+                continue
+            }
+            
+            print("✅ Found text: '\(topCandidate.string)' (confidence: \(topCandidate.confidence))")
             
             // Create bounding box with the recognized text
             let textBox = TextBoundingBox(
@@ -235,8 +367,11 @@ class OCRProcessor {
             textBoxes.append(textBox)
         }
         
+        print("🎉 Created \(textBoxes.count) text boxes for \(identifier)")
         let result = OCRResult(assetIdentifier: identifier, textBoxes: textBoxes, processingTime: processingTime, error: nil)
+        print("📤 About to call completion with result")
         completion(result)
+        print("✅ Completion called for \(identifier)")
     }
 }
 
