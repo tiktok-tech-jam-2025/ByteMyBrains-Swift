@@ -21,3 +21,5 @@ xcuserdata/
 !**/*.playground/playground.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
 
 PHPickerDemo/Models/
+
+/Models/
