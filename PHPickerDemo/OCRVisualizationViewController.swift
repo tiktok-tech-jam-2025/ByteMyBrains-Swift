@@ -25,9 +25,14 @@ class OCRVisualizationViewController: UIViewController {
     private var currentImageIndex = 0
     private var loadedImages: [String: UIImage] = [:]
     
-    // Blur functionality properties
-    private var imageBlurStates: [String: Bool] = [:]
-    private var imageButtons: [String: UIButton] = [:]
+    // Separate blur states for text and objects
+    private var textBlurStates: [String: Bool] = [:]
+    private var objectBlurStates: [String: Bool] = [:]
+    
+    // Button references
+    private var textBlurButtons: [String: UIButton] = [:]
+    private var objectBlurButtons: [String: UIButton] = [:]
+    private var downloadButtons: [String: UIButton] = [:]
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -89,7 +94,7 @@ class OCRVisualizationViewController: UIViewController {
         imageView.contentMode = .scaleAspectFit
         imageView.backgroundColor = .clear
         
-        // Create control view for blur/download button
+        // Create control view for blur/download buttons - increased height for 3 buttons
         controlView = UIView()
         controlView.translatesAutoresizingMaskIntoConstraints = false
         controlView.backgroundColor = .systemGray6
@@ -113,7 +118,7 @@ class OCRVisualizationViewController: UIViewController {
         view.addSubview(textDetailsView)
         scrollView.addSubview(imageView)
         
-        // Setup constraints
+        // Setup constraints - increased control view height for 3 buttons
         NSLayoutConstraint.activate([
             // Segmented control
             segmentedControl.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
@@ -139,11 +144,11 @@ class OCRVisualizationViewController: UIViewController {
             imageView.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
             imageView.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
             
-            // Control view (blur/download button area)
+            // Control view - increased height for 3 buttons
             controlView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             controlView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             controlView.bottomAnchor.constraint(equalTo: textDetailsView.topAnchor, constant: -8),
-            controlView.heightAnchor.constraint(equalToConstant: 60),
+            controlView.heightAnchor.constraint(equalToConstant: 140), // Increased from 60 to 140
             
             // Text details view
             textDetailsView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
@@ -253,65 +258,120 @@ class OCRVisualizationViewController: UIViewController {
         }
     }
     
-    // Update control view based on sensitive content
+    // Update control view with separate buttons for text, objects, and download
     private func updateControlView(for result: OCRResult) {
         // Clear existing subviews
         controlView.subviews.forEach { $0.removeFromSuperview() }
         
-        // Check if image has sensitive content from BOTH OCR and Object Detection
+        // Check for sensitive content
         let hasSensitiveText = result.textBoxes.contains { $0.classification?.isSensitive == true }
-        
-        // Check for sensitive objects
         let objectResult = objectDetectionResults.first { $0.assetIdentifier == result.assetIdentifier }
         let hasSensitiveObjects = objectResult?.hasSensitiveObjects ?? false
         
-        // Combine both checks
-        let hasSensitiveContent = hasSensitiveText || hasSensitiveObjects
-        
-        if hasSensitiveContent {
-            // Create blur & download button
-            let button = createBlurDownloadButton(for: result)
-            controlView.addSubview(button)
-            
-            // Store button reference
-            imageButtons[result.assetIdentifier] = button
-            
-            // Center the button in container
-            button.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                button.centerXAnchor.constraint(equalTo: controlView.centerXAnchor),
-                button.centerYAnchor.constraint(equalTo: controlView.centerYAnchor),
-                button.widthAnchor.constraint(equalToConstant: 200),
-                button.heightAnchor.constraint(equalToConstant: 44)
-            ])
+        if hasSensitiveText || hasSensitiveObjects {
+            setupSensitiveContentButtons(for: result, hasSensitiveText: hasSensitiveText, hasSensitiveObjects: hasSensitiveObjects)
         } else {
-            // Create "All's Good" label
-            let label = createAllGoodLabel()
-            controlView.addSubview(label)
-            
-            // Center the label in container
-            label.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                label.centerXAnchor.constraint(equalTo: controlView.centerXAnchor),
-                label.centerYAnchor.constraint(equalTo: controlView.centerYAnchor)
-            ])
+            setupAllGoodLabel()
         }
     }
     
-    // Create blur & download button
-    private func createBlurDownloadButton(for result: OCRResult) -> UIButton {
+    private func setupSensitiveContentButtons(for result: OCRResult, hasSensitiveText: Bool, hasSensitiveObjects: Bool) {
+        let buttonHeight: CGFloat = 32
+        let buttonWidth: CGFloat = 220
+        
+        // Create a vertical stack view
+        let stackView = UIStackView()
+        stackView.axis = .vertical
+        stackView.alignment = .center  // This ensures all buttons are centered
+        stackView.distribution = .equalSpacing
+        stackView.spacing = 6
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        
+        // Text blur button (only if there's sensitive text)
+        if hasSensitiveText {
+            let textBlurButton = createTextBlurButton(for: result)
+            textBlurButtons[result.assetIdentifier] = textBlurButton
+            
+            // Set button size
+            textBlurButton.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                textBlurButton.widthAnchor.constraint(equalToConstant: buttonWidth),
+                textBlurButton.heightAnchor.constraint(equalToConstant: buttonHeight)
+            ])
+            
+            stackView.addArrangedSubview(textBlurButton)
+        }
+        
+        // Object blur button (only if there are sensitive objects)
+        if hasSensitiveObjects {
+            let objectBlurButton = createObjectBlurButton(for: result)
+            objectBlurButtons[result.assetIdentifier] = objectBlurButton
+            
+            // Set button size
+            objectBlurButton.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                objectBlurButton.widthAnchor.constraint(equalToConstant: buttonWidth),
+                objectBlurButton.heightAnchor.constraint(equalToConstant: buttonHeight)
+            ])
+            
+            stackView.addArrangedSubview(objectBlurButton)
+        }
+        
+        // Download button (always present when there's sensitive content)
+        let downloadButton = createDownloadButton(for: result)
+        downloadButtons[result.assetIdentifier] = downloadButton
+        
+        // Set button size
+        downloadButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            downloadButton.widthAnchor.constraint(equalToConstant: buttonWidth),
+            downloadButton.heightAnchor.constraint(equalToConstant: buttonHeight)
+        ])
+        
+        stackView.addArrangedSubview(downloadButton)
+        
+        // Add stack view to control view and center it
+        controlView.addSubview(stackView)
+        
+        NSLayoutConstraint.activate([
+            stackView.centerXAnchor.constraint(equalTo: controlView.centerXAnchor),
+            stackView.centerYAnchor.constraint(equalTo: controlView.centerYAnchor),
+            stackView.leadingAnchor.constraint(greaterThanOrEqualTo: controlView.leadingAnchor, constant: 8),
+            stackView.trailingAnchor.constraint(lessThanOrEqualTo: controlView.trailingAnchor, constant: -8),
+            stackView.topAnchor.constraint(greaterThanOrEqualTo: controlView.topAnchor, constant: 8),
+            stackView.bottomAnchor.constraint(lessThanOrEqualTo: controlView.bottomAnchor, constant: -8)
+        ])
+    }
+    
+    private func setupAllGoodLabel() {
+        let label = UILabel()
+        label.text = "✅ All's Good - No Sensitive Content"
+        label.textAlignment = .center
+        label.font = UIFont.systemFont(ofSize: 13, weight: .medium)
+        label.textColor = UIColor.systemGreen
+        label.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.1)
+        label.layer.cornerRadius = 8
+        label.layer.masksToBounds = true
+        
+        controlView.addSubview(label)
+        
+        label.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: controlView.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: controlView.centerYAnchor),
+            label.widthAnchor.constraint(equalToConstant: 280),
+            label.heightAnchor.constraint(equalToConstant: 36)
+        ])
+    }
+    
+    // Create text blur button
+    private func createTextBlurButton(for result: OCRResult) -> UIButton {
         let button = UIButton(type: .system)
-        button.tag = currentImageIndex
+        updateTextBlurButtonAppearance(button: button, isBlurred: textBlurStates[result.assetIdentifier] ?? false)
         
-        // Initial state - not blurred
-        updateButtonAppearance(button: button, isBlurred: false)
-        
-        // Add action
-        button.addTarget(self, action: #selector(blurAndDownloadTapped(_:)), for: .touchUpInside)
-        
-        // Style the button
-        button.layer.cornerRadius = 22
-        button.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+        button.addTarget(self, action: #selector(textBlurTapped(_:)), for: .touchUpInside)
+        button.layer.cornerRadius = 20
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
         
         // Add shadow
         button.layer.shadowColor = UIColor.black.cgColor
@@ -322,72 +382,124 @@ class OCRVisualizationViewController: UIViewController {
         return button
     }
     
-    // Update button appearance based on blur state
-    private func updateButtonAppearance(button: UIButton, isBlurred: Bool) {
+    // Create object blur button
+    private func createObjectBlurButton(for result: OCRResult) -> UIButton {
+        let button = UIButton(type: .system)
+        updateObjectBlurButtonAppearance(button: button, isBlurred: objectBlurStates[result.assetIdentifier] ?? false)
+        
+        button.addTarget(self, action: #selector(objectBlurTapped(_:)), for: .touchUpInside)
+        button.layer.cornerRadius = 20
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        
+        // Add shadow
+        button.layer.shadowColor = UIColor.black.cgColor
+        button.layer.shadowOffset = CGSize(width: 0, height: 2)
+        button.layer.shadowOpacity = 0.1
+        button.layer.shadowRadius = 4
+        
+        return button
+    }
+    
+    // Create download button
+    private func createDownloadButton(for result: OCRResult) -> UIButton {
+        let button = UIButton(type: .system)
+        button.setTitle("📥 Download Blurred Image", for: .normal)
+        button.backgroundColor = UIColor.systemGreen
+        button.setTitleColor(.white, for: .normal)
+        
+        button.addTarget(self, action: #selector(downloadBlurredImage(_:)), for: .touchUpInside)
+        button.layer.cornerRadius = 20
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        
+        // Add shadow
+        button.layer.shadowColor = UIColor.black.cgColor
+        button.layer.shadowOffset = CGSize(width: 0, height: 2)
+        button.layer.shadowOpacity = 0.1
+        button.layer.shadowRadius = 4
+        
+        return button
+    }
+    
+    private func updateTextBlurButtonAppearance(button: UIButton, isBlurred: Bool) {
         if isBlurred {
-            button.setTitle("📥 Download Blurred Image", for: .normal)
-            button.backgroundColor = UIColor.systemGreen
-            button.setTitleColor(.white, for: .normal)
-        } else {
-            button.setTitle("🔒 Blur & Download Image", for: .normal)
+            button.setTitle("📝 Text Blur: ON", for: .normal)
             button.backgroundColor = UIColor.systemBlue
             button.setTitleColor(.white, for: .normal)
+        } else {
+            button.setTitle("📝 Text Blur: OFF", for: .normal)
+            button.backgroundColor = UIColor.systemGray4
+            button.setTitleColor(.label, for: .normal)
         }
     }
     
-    // Create "All's Good" label
-    private func createAllGoodLabel() -> UILabel {
-        let label = UILabel()
-        label.text = "✅ All's Good - No Sensitive Content"
-        label.textAlignment = .center
-        label.font = UIFont.systemFont(ofSize: 16, weight: .medium)
-        label.textColor = UIColor.systemGreen
-        label.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.1)
-        label.layer.cornerRadius = 8
-        label.layer.masksToBounds = true
-        
-        // Add padding
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.widthAnchor.constraint(equalToConstant: 280).isActive = true
-        label.heightAnchor.constraint(equalToConstant: 36).isActive = true
-        
-        return label
+    private func updateObjectBlurButtonAppearance(button: UIButton, isBlurred: Bool) {
+        if isBlurred {
+            button.setTitle("🎯 Object Blur: ON", for: .normal)
+            button.backgroundColor = UIColor.systemOrange
+            button.setTitleColor(.white, for: .normal)
+        } else {
+            button.setTitle("🎯 Object Blur: OFF", for: .normal)
+            button.backgroundColor = UIColor.systemGray4
+            button.setTitleColor(.label, for: .normal)
+        }
     }
     
-    // Handle button tap action
-    @objc private func blurAndDownloadTapped(_ sender: UIButton) {
+    // Text blur button action
+    @objc private func textBlurTapped(_ sender: UIButton) {
         let result = ocrResults[currentImageIndex]
         let assetId = result.assetIdentifier
         
-        // Get current blur state
-        let currentlyBlurred = imageBlurStates[assetId] ?? false
+        // Toggle text blur state
+        let currentState = textBlurStates[assetId] ?? false
+        textBlurStates[assetId] = !currentState
         
-        if !currentlyBlurred {
-            // First tap - blur the image
-            imageBlurStates[assetId] = true
-            updateButtonAppearance(button: sender, isBlurred: true)
-            
-            // Re-render current image with blur
-            if let visualizationImage = createVisualizationImage(for: result) {
-                imageView.image = visualizationImage
-                scrollView.zoomScale = 1.0
-                imageView.frame.size = visualizationImage.size
-                scrollView.contentSize = visualizationImage.size
-            }
-            
-            // Provide haptic feedback
-            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-            impactFeedback.impactOccurred()
-            
-            print("🔒 Image \(currentImageIndex + 1) sensitive content blurred")
-        } else {
-            // Second tap - download the blurred image
-            downloadBlurredImage()
+        // Update button appearance
+        updateTextBlurButtonAppearance(button: sender, isBlurred: !currentState)
+        
+        // Re-render image
+        if let visualizationImage = createVisualizationImage(for: result) {
+            imageView.image = visualizationImage
+            scrollView.zoomScale = 1.0
+            imageView.frame.size = visualizationImage.size
+            scrollView.contentSize = visualizationImage.size
         }
+        
+        // Haptic feedback
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
+        
+        print("📝 Text blur toggled: \(!currentState) for image \(currentImageIndex + 1)")
     }
     
-    // Download blurred image - BLUR ONLY VERSION
-    private func downloadBlurredImage() {
+    // Object blur button action
+    @objc private func objectBlurTapped(_ sender: UIButton) {
+        let result = ocrResults[currentImageIndex]
+        let assetId = result.assetIdentifier
+        
+        // Toggle object blur state
+        let currentState = objectBlurStates[assetId] ?? false
+        objectBlurStates[assetId] = !currentState
+        
+        // Update button appearance
+        updateObjectBlurButtonAppearance(button: sender, isBlurred: !currentState)
+        
+        // Re-render image
+        if let visualizationImage = createVisualizationImage(for: result) {
+            imageView.image = visualizationImage
+            scrollView.zoomScale = 1.0
+            imageView.frame.size = visualizationImage.size
+            scrollView.contentSize = visualizationImage.size
+        }
+        
+        // Haptic feedback
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
+        
+        print("🎯 Object blur toggled: \(!currentState) for image \(currentImageIndex + 1)")
+    }
+    
+    // Download button action
+    @objc private func downloadBlurredImage(_ sender: UIButton) {
         let result = ocrResults[currentImageIndex]
         
         guard let originalImage = loadedImages[result.assetIdentifier] else {
@@ -395,21 +507,24 @@ class OCRVisualizationViewController: UIViewController {
             return
         }
         
-        // Create image with ONLY blur applied to sensitive areas
-        let blurredImage = createBlurredImageVisualization(for: result)
+        // Create image with only the selected blur types applied
+        let blurredImage = createFinalBlurredImage(for: result)
         
         // Save to photo library
         UIImageWriteToSavedPhotosAlbum(blurredImage, self, #selector(image(_:didFinishSavingWithError:contextInfo:)), nil)
         
-        // Provide haptic feedback
+        // Haptic feedback
         let successFeedback = UINotificationFeedbackGenerator()
         successFeedback.notificationOccurred(.success)
         
-        print("📥 Downloaded blur-only image \(currentImageIndex + 1)")
+        let textBlurEnabled = textBlurStates[result.assetIdentifier] ?? false
+        let objectBlurEnabled = objectBlurStates[result.assetIdentifier] ?? false
+        
+        print("📥 Downloaded image \(currentImageIndex + 1) - Text blur: \(textBlurEnabled), Object blur: \(objectBlurEnabled)")
     }
     
-    // Create blurred image for download - BLUR ONLY, NO BOUNDING BOXES
-    private func createBlurredImageVisualization(for result: OCRResult) -> UIImage {
+    // Create final blurred image for download (no bounding boxes, only selected blur types)
+    private func createFinalBlurredImage(for result: OCRResult) -> UIImage {
         guard let originalImage = loadedImages[result.assetIdentifier] else { return UIImage() }
         
         let imageSize = originalImage.size
@@ -421,21 +536,29 @@ class OCRVisualizationViewController: UIViewController {
             // Draw original image
             originalImage.draw(at: .zero)
             
-            // ONLY apply blur to sensitive text regions - NO bounding boxes
-            for textBox in result.textBoxes {
-                if textBox.classification?.isSensitive == true {
-                    let rect = VisionCoordinateConverter.convertBoundingBox(textBox.boundingBox, to: imageSize)
-                    drawBlurEffect(context: cgContext, rect: rect, imageSize: imageSize)
+            let assetId = result.assetIdentifier
+            let textBlurEnabled = textBlurStates[assetId] ?? false
+            let objectBlurEnabled = objectBlurStates[assetId] ?? false
+            
+            // Apply text blur if enabled
+            if textBlurEnabled {
+                for textBox in result.textBoxes {
+                    if textBox.classification?.isSensitive == true {
+                        let rect = VisionCoordinateConverter.convertBoundingBox(textBox.boundingBox, to: imageSize)
+                        drawBlurEffect(context: cgContext, rect: rect, imageSize: imageSize)
+                    }
                 }
             }
             
-            // ONLY apply blur to sensitive object regions - NO bounding boxes
-            let objectResult = objectDetectionResults.first { $0.assetIdentifier == result.assetIdentifier }
-            if let objectResult = objectResult {
-                for objectBox in objectResult.objectBoxes {
-                    if objectBox.isSensitive {
-                        let rect = VisionCoordinateConverter.convertBoundingBox(objectBox.boundingBox, to: imageSize)
-                        drawBlurEffect(context: cgContext, rect: rect, imageSize: imageSize)
+            // Apply object blur if enabled
+            if objectBlurEnabled {
+                let objectResult = objectDetectionResults.first { $0.assetIdentifier == result.assetIdentifier }
+                if let objectResult = objectResult {
+                    for objectBox in objectResult.objectBoxes {
+                        if objectBox.isSensitive {
+                            let rect = VisionCoordinateConverter.convertBoundingBox(objectBox.boundingBox, to: imageSize)
+                            drawBlurEffect(context: cgContext, rect: rect, imageSize: imageSize)
+                        }
                     }
                 }
             }
@@ -547,9 +670,9 @@ class OCRVisualizationViewController: UIViewController {
     private func drawBoundingBox(context: CGContext, textBox: TextBoundingBox, imageSize: CGSize, index: Int, result: OCRResult) {
         let rect = VisionCoordinateConverter.convertBoundingBox(textBox.boundingBox, to: imageSize)
         
-        // Check if this text is sensitive and if blur is enabled for this image
+        // Check if this text should be blurred (both sensitive AND text blur enabled)
         let isSensitive = textBox.classification?.isSensitive ?? false
-        let shouldBlur = isSensitive && (imageBlurStates[result.assetIdentifier] ?? false)
+        let shouldBlur = isSensitive && (textBlurStates[result.assetIdentifier] ?? false)
         
         // Draw blur effect for sensitive text if enabled
         if shouldBlur {
@@ -580,8 +703,8 @@ class OCRVisualizationViewController: UIViewController {
     private func drawObjectBoundingBox(context: CGContext, objectBox: ObjectBoundingBox, imageSize: CGSize, index: Int, result: OCRResult) {
         let rect = VisionCoordinateConverter.convertBoundingBox(objectBox.boundingBox, to: imageSize)
         
-        // Check if this object should be blurred
-        let shouldBlur = objectBox.isSensitive && (imageBlurStates[result.assetIdentifier] ?? false)
+        // Check if this object should be blurred (both sensitive AND object blur enabled)
+        let shouldBlur = objectBox.isSensitive && (objectBlurStates[result.assetIdentifier] ?? false)
         
         // Draw blur effect for sensitive objects if enabled
         if shouldBlur {
