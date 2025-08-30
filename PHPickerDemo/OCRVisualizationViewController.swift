@@ -21,6 +21,7 @@ class OCRVisualizationViewController: UIViewController {
     var ocrResults: [OCRResult] = []
     var objectDetectionResults: [ObjectDetectionResult] = []
     var selection: [String: PHPickerResult] = [:]
+    var onVisualizationViewed: (() -> Void)?
     
     private var currentImageIndex = 0
     private var loadedImages: [String: UIImage] = [:]
@@ -41,6 +42,13 @@ class OCRVisualizationViewController: UIViewController {
         loadAllImages()
     }
     
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        
+        // 🔐 Notify that user has viewed the visualization
+        onVisualizationViewed?()
+    }
+    
     private func setupUI() {
         view.backgroundColor = .systemBackground
         title = "OCR & Object Detection Visualization"
@@ -50,6 +58,22 @@ class OCRVisualizationViewController: UIViewController {
             target: self,
             action: #selector(dismissView)
         )
+        
+        let doneButton = UIBarButtonItem(
+            barButtonSystemItem: .done,
+            target: self,
+            action: #selector(dismissView)
+        )
+        
+        let encryptButton = UIBarButtonItem(
+            title: "🔐 Encrypt",
+            style: .plain,
+            target: self,
+            action: #selector(showEncryptionOptions)
+        )
+        
+        // Set multiple buttons on the left side
+        navigationItem.leftBarButtonItems = [doneButton, encryptButton]
         
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             title: "Export",
@@ -918,5 +942,251 @@ struct VisionCoordinateConverter {
         let height = visionBox.height * imageSize.height
         
         return CGRect(x: x, y: y, width: width, height: height)
+    }
+}
+
+// MARK: - Encryption Extensions
+
+extension OCRVisualizationViewController {
+    
+    @objc private func showEncryptionOptions() {
+        guard currentImageIndex < ocrResults.count else {
+            showAlert(title: "Error", message: "Could not access current image")
+            return
+        }
+        
+        let result = ocrResults[currentImageIndex]
+        let objectResult = objectDetectionResults.first { $0.assetIdentifier == result.assetIdentifier }
+        
+        // Check if there's any sensitive content
+        let hasSensitiveText = result.textBoxes.contains { $0.classification?.isSensitive == true }
+        let hasSensitiveObjects = objectResult?.hasSensitiveObjects ?? false
+        
+        guard hasSensitiveText || hasSensitiveObjects else {
+            showAlert(title: "No Encryption Needed", message: "This image contains no sensitive content that needs encryption.")
+            return
+        }
+        
+        // Ask user what they want to do
+        let alert = UIAlertController(
+            title: "🔐 Encrypt Image",
+            message: "Choose how to save the encrypted files:",
+            preferredStyle: .alert
+        )
+        
+        // Option 1: Save locally (JSON to Files, Image to Photos)
+        alert.addAction(UIAlertAction(title: "📱 Save Locally", style: .default) { [weak self] _ in
+            self?.encryptAndSaveLocally()
+        })
+        
+        // Option 2: Export both files for sharing
+        alert.addAction(UIAlertAction(title: "📤 Export Both Files", style: .default) { [weak self] _ in
+            self?.encryptAndExportBothFiles()
+        })
+        
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        
+        present(alert, animated: true)
+    }
+
+    private func encryptAndSaveLocally() {
+        guard currentImageIndex < ocrResults.count else { return }
+        
+        let result = ocrResults[currentImageIndex]
+        let objectResult = objectDetectionResults.first { $0.assetIdentifier == result.assetIdentifier }
+        
+        guard let originalImage = loadedImages[result.assetIdentifier] else {
+            showAlert(title: "Error", message: "Could not access original image")
+            return
+        }
+        
+        // Show progress
+        let progressAlert = UIAlertController(title: "🔐 Encrypting", message: "Encrypting sensitive regions...", preferredStyle: .alert)
+        present(progressAlert, animated: true)
+        
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let encryptionResult = ImageEncryptionManager.shared.encryptSensitiveRegions(
+                originalImage: originalImage,
+                ocrResult: result,
+                objectResult: objectResult
+            ) else {
+                DispatchQueue.main.async {
+                    progressAlert.dismiss(animated: true) {
+                        self?.showAlert(title: "Encryption Failed", message: "Could not encrypt the image")
+                    }
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                progressAlert.dismiss(animated: true) {
+                    self?.saveFilesLocally(blurredImage: encryptionResult.blurredImage,
+                                         encryptedData: encryptionResult.encryptedData)
+                }
+            }
+        }
+    }
+
+    private func encryptAndExportBothFiles() {
+        guard currentImageIndex < ocrResults.count else { return }
+        
+        let result = ocrResults[currentImageIndex]
+        let objectResult = objectDetectionResults.first { $0.assetIdentifier == result.assetIdentifier }
+        
+        guard let originalImage = loadedImages[result.assetIdentifier] else {
+            showAlert(title: "Error", message: "Could not access original image")
+            return
+        }
+        
+        // Show progress
+        let progressAlert = UIAlertController(title: "🔐 Encrypting", message: "Encrypting sensitive regions...", preferredStyle: .alert)
+        present(progressAlert, animated: true)
+        
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let encryptionResult = ImageEncryptionManager.shared.encryptSensitiveRegions(
+                originalImage: originalImage,
+                ocrResult: result,
+                objectResult: objectResult
+            ) else {
+                DispatchQueue.main.async {
+                    progressAlert.dismiss(animated: true) {
+                        self?.showAlert(title: "Encryption Failed", message: "Could not encrypt the image")
+                    }
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                progressAlert.dismiss(animated: true) {
+                    self?.exportBothFiles(blurredImage: encryptionResult.blurredImage,
+                                        encryptedData: encryptionResult.encryptedData)
+                }
+            }
+        }
+    }
+
+    private func saveFilesLocally(blurredImage: UIImage, encryptedData: Data) {
+        let timestamp = Int(Date().timeIntervalSince1970)
+        
+        // Save blurred image to Photos App
+        UIImageWriteToSavedPhotosAlbum(blurredImage, self, #selector(imageSavedToPhotos(_:didFinishSavingWithError:contextInfo:)), nil)
+        
+        // Save JSON to Files App
+        saveJSONToFiles(encryptedData: encryptedData, timestamp: timestamp)
+    }
+
+    @objc private func imageSavedToPhotos(_ image: UIImage, didFinishSavingWithError error: Error?, contextInfo: UnsafeRawPointer) {
+        DispatchQueue.main.async {
+            if let error = error {
+                print("❌ Failed to save blurred image to Photos: \(error)")
+                self.showAlert(title: "Save Error", message: "Failed to save blurred image to Photos: \(error.localizedDescription)")
+            } else {
+                print("✅ Blurred image saved to Photos successfully")
+            }
+        }
+    }
+
+    private func saveJSONToFiles(encryptedData: Data, timestamp: Int) {
+        // Use UIDocumentPickerViewController to let user choose where to save
+        let fileName = "encryption_data_\(timestamp).json"
+        
+        // Create temporary file first
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempURL = tempDir.appendingPathComponent(fileName)
+        
+        do {
+            // Write to temporary location first
+            try encryptedData.write(to: tempURL)
+            print("✅ JSON created in temp directory: \(tempURL.path)")
+            
+            // Present document picker to save the file
+            let documentPicker = UIDocumentPickerViewController(forExporting: [tempURL])
+            documentPicker.delegate = self
+            documentPicker.modalPresentationStyle = .formSheet
+            
+            present(documentPicker, animated: true) {
+                print("📁 Document picker presented for saving JSON")
+            }
+            
+        } catch {
+            print("❌ Failed to create temp JSON file: \(error)")
+            DispatchQueue.main.async {
+                self.showAlert(title: "Save Error", message: "Failed to create encryption file: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func exportBothFiles(blurredImage: UIImage, encryptedData: Data) {
+        let timestamp = Int(Date().timeIntervalSince1970)
+        
+        // Create temporary files for sharing
+        let tempDir = FileManager.default.temporaryDirectory
+        let imageURL = tempDir.appendingPathComponent("blurred_image_\(timestamp).png")
+        let jsonURL = tempDir.appendingPathComponent("encryption_data_\(timestamp).json")
+        
+        do {
+            // Save blurred image to temp
+            guard let imageData = blurredImage.pngData() else {
+                showAlert(title: "Export Error", message: "Could not convert image to PNG")
+                return
+            }
+            try imageData.write(to: imageURL)
+            
+            // Save encryption data to temp
+            try encryptedData.write(to: jsonURL)
+            
+            // Share both files
+            let activityVC = UIActivityViewController(activityItems: [imageURL, jsonURL], applicationActivities: nil)
+            activityVC.popoverPresentationController?.barButtonItem = navigationItem.leftBarButtonItems?.first { $0.title?.contains("🔐") == true }
+            
+            activityVC.completionWithItemsHandler = { _, _, _, _ in
+                // Clean up temp files after sharing
+                try? FileManager.default.removeItem(at: imageURL)
+                try? FileManager.default.removeItem(at: jsonURL)
+                print("🧹 Temporary sharing files cleaned up")
+            }
+            
+            present(activityVC, animated: true)
+            
+            print("📤 Sharing both files: blurred image + encryption JSON")
+            
+        } catch {
+            showAlert(title: "Share Error", message: "Could not prepare files for sharing: \(error.localizedDescription)")
+        }
+    }
+}
+
+// MARK: - Document Picker Delegate (for saving JSON)
+extension OCRVisualizationViewController: UIDocumentPickerDelegate {
+    
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        // This is called when user selects location to save JSON
+        guard let savedURL = urls.first else { return }
+        
+        print("✅ JSON encryption file saved to: \(savedURL.lastPathComponent)")
+        
+        DispatchQueue.main.async {
+            let alert = UIAlertController(
+                title: "Files Saved! 💾",
+                message: "✅ Blurred image → Photos app\n✅ Encryption file → \(savedURL.lastPathComponent)\n\nBoth files are now saved!",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            self.present(alert, animated: true)
+        }
+    }
+    
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        print("📁 User cancelled saving JSON file")
+        
+        DispatchQueue.main.async {
+            let alert = UIAlertController(
+                title: "Save Cancelled",
+                message: "Blurred image was saved to Photos, but encryption file was not saved. You can try encrypting again to save the JSON file.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            self.present(alert, animated: true)
+        }
     }
 }

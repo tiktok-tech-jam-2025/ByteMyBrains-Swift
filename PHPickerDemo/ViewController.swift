@@ -20,6 +20,10 @@ class ViewController: UIViewController {
     }
     @IBOutlet weak var playButton: UIButton!
     @IBOutlet weak var ocrButton: UIButton!
+    
+    // ADD NEW DECRYPT BUTTON
+    private var decryptButton: UIButton!
+    
     private var playButtonVideoURL: URL?
 
     private var selection = [String: PHPickerResult]()
@@ -41,16 +45,82 @@ class ViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
+        setupDecryptButton() // Add the big decrypt button
+        
         // Debug: Check if OCR button is connected
         if ocrButton != nil {
             print("✅ OCR Button is connected")
-            ocrButton.isHidden = false  // Initially hide it until images are selected
+            ocrButton.isHidden = false
         } else {
             print("❌ OCR Button is NOT connected - check storyboard connection")
         }
         
         // Debug: Check if the text classification model is working
         testTextClassification()
+    }
+
+    private func setupDecryptButton() {
+        // Create the decrypt button
+        decryptButton = UIButton(type: .system)
+        decryptButton.setTitle("🔓 DECRYPT IMAGE", for: .normal)
+        decryptButton.titleLabel?.font = UIFont.boldSystemFont(ofSize: 20)
+        decryptButton.backgroundColor = UIColor.systemBlue
+        decryptButton.setTitleColor(.white, for: .normal)
+        decryptButton.layer.cornerRadius = 15
+        decryptButton.layer.shadowColor = UIColor.black.cgColor
+        decryptButton.layer.shadowOffset = CGSize(width: 0, height: 3)
+        decryptButton.layer.shadowOpacity = 0.3
+        decryptButton.layer.shadowRadius = 6
+        
+        // Add action
+        decryptButton.addTarget(self, action: #selector(decryptButtonTapped), for: .touchUpInside)
+        
+        // Add to view
+        view.addSubview(decryptButton)
+        
+        // Set up constraints - position it prominently in the center
+        decryptButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            decryptButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            decryptButton.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: 120),
+            decryptButton.widthAnchor.constraint(equalToConstant: 250),
+            decryptButton.heightAnchor.constraint(equalToConstant: 60)
+        ])
+        
+        print("✅ Decrypt button created and added to view prominently")
+    }
+
+    @objc private func decryptButtonTapped() {
+        print("🔓 Decrypt button tapped")
+        
+        // Check if there's a blurred image displayed
+        guard imageView.image != nil else {
+            showAlert(title: "No Image", message: "Please load a blurred image first before decrypting")
+            return
+        }
+        
+        // Present document picker to select JSON file
+        let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: [.json])
+        documentPicker.delegate = self
+        documentPicker.modalPresentationStyle = .formSheet
+        documentPicker.allowsMultipleSelection = false
+        
+        present(documentPicker, animated: true) {
+            print("📁 Document picker presented for JSON selection")
+        }
+    }
+    
+    private func showEncryptionFilePicker() {
+        print("📁 Opening document picker for JSON file...")
+        
+        let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: [.json])
+        documentPicker.delegate = self
+        documentPicker.allowsMultipleSelection = false
+        documentPicker.modalPresentationStyle = .formSheet
+        
+        present(documentPicker, animated: true) {
+            print("📁 Document picker presented")
+        }
     }
     
     @IBAction func runOCROnSelectedImages(_ sender: UIButton) {
@@ -176,6 +246,7 @@ class ViewController: UIViewController {
     }
 }
 
+// MARK: - Image Display Methods
 private extension ViewController {
     
     func displayNext() {
@@ -238,10 +309,6 @@ private extension ViewController {
         }
     }
     
-}
-
-private extension ViewController {
-    
     func displayEmptyImage() {
         displayImage(UIImage(systemName: "photo.on.rectangle.angled"))
     }
@@ -297,9 +364,9 @@ private extension ViewController {
         progressView.observedProgress = nil
         progressView.isHidden = true
     }
-        
 }
 
+// MARK: - Photo Picker Delegate
 extension ViewController: PHPickerViewControllerDelegate {
     func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         dismiss(animated: true)
@@ -327,8 +394,6 @@ extension ViewController: PHPickerViewControllerDelegate {
 // MARK: - OCR Integration Extension
 extension ViewController: OCRProcessorDelegate {
     
-    // MARK: - OCRProcessorDelegate Methods
-    
     func ocrProcessor(_ processor: OCRProcessor, didStartProcessing totalImages: Int) {
         print("🎬 OCR DELEGATE: didStartProcessing called with \(totalImages) images")
         DispatchQueue.main.async {
@@ -349,8 +414,6 @@ extension ViewController: OCRProcessorDelegate {
     
     func ocrProcessor(_ processor: OCRProcessor, didCompleteWithResults results: [OCRResult]) {
         print("✅ OCR DELEGATE: didCompleteWithResults called with \(results.count) results")
-        
-        // Store OCR results and check if both processors are complete
         handleOCRCompletion(with: results)
     }
     
@@ -368,8 +431,6 @@ extension ViewController: OCRProcessorDelegate {
             print("❌ OCR DELEGATE: Error handled, button re-enabled")
         }
     }
-    
-    // MARK: - Helper Methods
     
     private func enableOCRButton() {
         print("🔄 Enabling OCR button")
@@ -391,18 +452,14 @@ extension ViewController: ObjectDetectionProcessorDelegate {
     
     func objectDetectionProcessor(_ processor: ObjectDetectionProcessor, didStartProcessing totalImages: Int) {
         print("🤖 OBJECT DETECTION DELEGATE: didStartProcessing called with \(totalImages) images")
-        // Progress is already handled by OCR delegate
     }
     
     func objectDetectionProcessor(_ processor: ObjectDetectionProcessor, didProcessImage at: Int, of total: Int) {
         print("🤖 OBJECT DETECTION DELEGATE: didProcessImage called - \(at) of \(total)")
-        // Progress updates handled by OCR for simplicity
     }
     
     func objectDetectionProcessor(_ processor: ObjectDetectionProcessor, didCompleteWithResults results: [ObjectDetectionResult]) {
         print("✅ OBJECT DETECTION DELEGATE: didCompleteWithResults called with \(results.count) results")
-        
-        // Store Object Detection results and check if both processors are complete
         handleObjectDetectionCompletion(with: results)
     }
     
@@ -411,8 +468,6 @@ extension ViewController: ObjectDetectionProcessorDelegate {
         DispatchQueue.main.async {
             print("❌ OBJECT DETECTION DELEGATE: On main thread - handling error")
             self.showAlert(title: "Object Detection Error", message: error.localizedDescription)
-            
-            // Continue with just OCR results if object detection fails
             self.handleObjectDetectionCompletion(with: [])
         }
     }
@@ -422,7 +477,6 @@ extension ViewController: ObjectDetectionProcessorDelegate {
 extension ViewController {
     
     private func handleOCRCompletion(with ocrResults: [OCRResult]) {
-        // Store OCR results in combined structure
         for ocrResult in ocrResults {
             if let existingIndex = combinedResults.firstIndex(where: { $0.ocrResult.assetIdentifier == ocrResult.assetIdentifier }) {
                 combinedResults[existingIndex] = (ocrResult, combinedResults[existingIndex].objectResult)
@@ -436,12 +490,10 @@ extension ViewController {
     }
     
     private func handleObjectDetectionCompletion(with objectResults: [ObjectDetectionResult]) {
-        // Store Object Detection results in combined structure
         for objectResult in objectResults {
             if let existingIndex = combinedResults.firstIndex(where: { $0.ocrResult.assetIdentifier == objectResult.assetIdentifier }) {
                 combinedResults[existingIndex] = (combinedResults[existingIndex].ocrResult, objectResult)
             } else {
-                // Create placeholder OCR result if object detection completes first
                 let placeholderOCR = OCRResult(assetIdentifier: objectResult.assetIdentifier, textBoxes: [], processingTime: 0, classificationTime: 0, error: nil)
                 combinedResults.append((placeholderOCR, objectResult))
             }
@@ -484,7 +536,6 @@ extension ViewController {
             
             print("📋 Processing combined result \(index + 1)/\(combinedResults.count) for asset: \(ocrResult.assetIdentifier)")
             
-            // Process OCR results
             if let error = ocrResult.error {
                 print("❌ OCR error for \(ocrResult.assetIdentifier): \(error.localizedDescription)")
                 errorCount += 1
@@ -498,7 +549,6 @@ extension ViewController {
                 print("   ⏱️ Processing time: \(String(format: "%.2f", ocrResult.totalProcessingTime))s")
             }
             
-            // Process Object Detection results
             if let objectResult = objectResult {
                 if let error = objectResult.error {
                     print("❌ Object Detection error for \(objectResult.assetIdentifier): \(error.localizedDescription)")
@@ -534,7 +584,6 @@ extension ViewController {
         print("🎉 Final Combined Summary:")
         print(message)
         
-        // Show results alert with option to view visualization
         let alert = UIAlertController(title: "Processing Results", message: message, preferredStyle: .alert)
        
         alert.addAction(UIAlertAction(title: "View Visualization", style: .default) { _ in
@@ -548,17 +597,149 @@ extension ViewController {
     
     private func showCombinedVisualization() {
         let visualizationVC = OCRVisualizationViewController()
-        
-        // Pass OCR results (existing)
         visualizationVC.ocrResults = combinedResults.map { $0.ocrResult }
-        
-        // Pass Object Detection results
         visualizationVC.objectDetectionResults = combinedResults.compactMap { $0.objectResult }
-        
         visualizationVC.selection = selection
         
         let navController = UINavigationController(rootViewController: visualizationVC)
         navController.modalPresentationStyle = .fullScreen
         present(navController, animated: true)
+    }
+}
+
+// MARK: - Decryption Functionality
+extension ViewController: UIDocumentPickerDelegate {
+    
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        print("📁 Document picker selected file: \(urls.first?.lastPathComponent ?? "unknown")")
+        
+        guard let encryptedFileURL = urls.first else {
+            print("❌ No file selected")
+            return
+        }
+        
+        // IMPORTANT: Start accessing security-scoped resource
+        guard encryptedFileURL.startAccessingSecurityScopedResource() else {
+            print("❌ Could not access security-scoped resource")
+            showAlert(title: "Permission Error", message: "Could not access the selected file. Please try again.")
+            return
+        }
+        
+        // Ensure we stop accessing the resource when done
+        defer {
+            encryptedFileURL.stopAccessingSecurityScopedResource()
+            print("🔒 Stopped accessing security-scoped resource")
+        }
+        
+        // Get current displayed image (should be the blurred image)
+        guard let currentBlurredImage = imageView.image else {
+            showAlert(title: "No Image", message: "No blurred image is currently displayed")
+            return
+        }
+        
+        print("✅ Starting decryption process...")
+        handleDecryptionProcess(blurredImage: currentBlurredImage, encryptedFileURL: encryptedFileURL)
+    }
+    
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        print("📁 Document picker was cancelled")
+    }
+    
+    private func handleDecryptionProcess(blurredImage: UIImage, encryptedFileURL: URL) {
+        print("🔓 Reading encryption file: \(encryptedFileURL.lastPathComponent)")
+        print("🔓 File path: \(encryptedFileURL.path)")
+        
+        do {
+            // Check if file exists and is readable
+            let fileManager = FileManager.default
+            
+            guard fileManager.fileExists(atPath: encryptedFileURL.path) else {
+                throw NSError(domain: "FileError", code: 404, userInfo: [NSLocalizedDescriptionKey: "File does not exist at path"])
+            }
+            
+            guard fileManager.isReadableFile(atPath: encryptedFileURL.path) else {
+                throw NSError(domain: "FileError", code: 403, userInfo: [NSLocalizedDescriptionKey: "File is not readable"])
+            }
+            
+            // Read the file data
+            let encryptedData = try Data(contentsOf: encryptedFileURL)
+            print("✅ Encryption file read successfully (\(encryptedData.count) bytes)")
+            
+            // Validate JSON structure
+            guard let jsonObject = try? JSONSerialization.jsonObject(with: encryptedData),
+                  let jsonDict = jsonObject as? [String: Any] else {
+                throw NSError(domain: "FileError", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid JSON format"])
+            }
+            
+            print("✅ JSON validation successful. Keys: \(Array(jsonDict.keys))")
+            
+            // Show progress
+            let progressAlert = UIAlertController(
+                title: "🔓 Decrypting",
+                message: "Restoring original image...",
+                preferredStyle: .alert
+            )
+            present(progressAlert, animated: true)
+            
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                print("🔓 Starting decryption on background thread...")
+                
+                let result = ImageEncryptionManager.shared.decryptImage(
+                    blurredImage: blurredImage,
+                    encryptedData: encryptedData
+                )
+                
+                print("🔓 Decryption result: success=\(result.success), regions=\(result.regionsDecrypted)")
+                
+                DispatchQueue.main.async {
+                    progressAlert.dismiss(animated: true) {
+                        if result.success, let originalImage = result.originalImage {
+                            print("🎉 Decryption successful! Saving to Photos...")
+                            self?.saveDecryptedImageToPhotos(originalImage)
+                        } else {
+                            print("❌ Decryption failed: \(result.error ?? "unknown error")")
+                            self?.showAlert(title: "Decryption Failed",
+                                          message: result.error ?? "Could not decrypt the image. Please check if the encryption file matches the blurred image.")
+                        }
+                    }
+                }
+            }
+            
+        } catch {
+            print("❌ Failed to read encryption file: \(error)")
+            showAlert(title: "File Error", message: "Could not read encryption file: \(error.localizedDescription)")
+        }
+    }
+    
+    private func saveDecryptedImageToPhotos(_ image: UIImage) {
+        print("💾 Saving decrypted image to Photos...")
+        UIImageWriteToSavedPhotosAlbum(image, self, #selector(decryptedImageSaved(_:didFinishSavingWithError:contextInfo:)), nil)
+    }
+    
+    @objc private func decryptedImageSaved(_ image: UIImage, didFinishSavingWithError error: Error?, contextInfo: UnsafeRawPointer) {
+        DispatchQueue.main.async {
+            if let error = error {
+                print("❌ Failed to save decrypted image to Photos: \(error)")
+                self.showAlert(title: "Save Error", message: "Failed to save decrypted image: \(error.localizedDescription)")
+            } else {
+                print("✅ Decrypted image saved to Photos successfully")
+                
+                let alert = UIAlertController(
+                    title: "Success! 🎉",
+                    message: "Original image has been decrypted and saved to your Photos app!",
+                    preferredStyle: .alert
+                )
+                
+                alert.addAction(UIAlertAction(title: "Open Photos App", style: .default) { _ in
+                    if let photosURL = URL(string: "photos-redirect://") {
+                        UIApplication.shared.open(photosURL)
+                    }
+                })
+                
+                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                
+                self.present(alert, animated: true)
+            }
+        }
     }
 }
