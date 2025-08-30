@@ -17,8 +17,6 @@
 		A72A7C412E62C8C10048B615 /* ObjectDetectionProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72A7C3F2E62C8C10048B615 /* ObjectDetectionProcessor.swift */; };
 		A72A7C432E62C8DE0048B615 /* TextClassificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72A7C422E62C8DE0048B615 /* TextClassificationManager.swift */; };
 		A72A7C6F2E630B8D0048B615 /* DecryptViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72A7C6E2E630B8D0048B615 /* DecryptViewController.swift */; };
-		A72A7C712E6310BA0048B615 /* ImageCryptography.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72A7C702E6310BA0048B615 /* ImageCryptography.swift */; };
-		A72A7C732E6310DB0048B615 /* KeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72A7C722E6310DB0048B615 /* KeyManager.swift */; };
 		A77AECDF2E61727700AE5CD0 /* OCRProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77AECDE2E61727700AE5CD0 /* OCRProcessor.swift */; };
 		A77AECE12E61906A00AE5CD0 /* OCRVisualizationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77AECE02E61906A00AE5CD0 /* OCRVisualizationViewController.swift */; };
 /* End PBXBuildFile section */
@@ -37,8 +35,6 @@
 		A72A7C3F2E62C8C10048B615 /* ObjectDetectionProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectDetectionProcessor.swift; sourceTree = "<group>"; };
 		A72A7C422E62C8DE0048B615 /* TextClassificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextClassificationManager.swift; sourceTree = "<group>"; };
 		A72A7C6E2E630B8D0048B615 /* DecryptViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecryptViewController.swift; sourceTree = "<group>"; };
-		A72A7C702E6310BA0048B615 /* ImageCryptography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCryptography.swift; sourceTree = "<group>"; };
-		A72A7C722E6310DB0048B615 /* KeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyManager.swift; sourceTree = "<group>"; };
 		A77AECDE2E61727700AE5CD0 /* OCRProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRProcessor.swift; sourceTree = "<group>"; };
 		A77AECE02E61906A00AE5CD0 /* OCRVisualizationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRVisualizationViewController.swift; sourceTree = "<group>"; };
 		B0469A2CDC8F91A0264F220C /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
@@ -115,8 +111,6 @@
 				A72A7C3F2E62C8C10048B615 /* ObjectDetectionProcessor.swift */,
 				A72A7C6E2E630B8D0048B615 /* DecryptViewController.swift */,
 				A72A7C422E62C8DE0048B615 /* TextClassificationManager.swift */,
-				A72A7C702E6310BA0048B615 /* ImageCryptography.swift */,
-				A72A7C722E6310DB0048B615 /* KeyManager.swift */,
 				261C3FAE2481C140005A1EFD /* Main.storyboard */,
 				261C3FB12481C141005A1EFD /* Assets.xcassets */,
 				261C3FB32481C141005A1EFD /* LaunchScreen.storyboard */,
@@ -215,14 +209,12 @@
 				261C3FAD2481C140005A1EFD /* ViewController.swift in Sources */,
 				A77AECDF2E61727700AE5CD0 /* OCRProcessor.swift in Sources */,
 				A72A7C6F2E630B8D0048B615 /* DecryptViewController.swift in Sources */,
-				A72A7C732E6310DB0048B615 /* KeyManager.swift in Sources */,
 				A77AECE12E61906A00AE5CD0 /* OCRVisualizationViewController.swift in Sources */,
 				261C3FA92481C140005A1EFD /* AppDelegate.swift in Sources */,
 				261C3FAB2481C140005A1EFD /* SceneDelegate.swift in Sources */,
 				A72A7C402E62C8C10048B615 /* ObjectDetectionModels.swift in Sources */,
 				A72A7C432E62C8DE0048B615 /* TextClassificationManager.swift in Sources */,
 				A72A7C412E62C8C10048B615 /* ObjectDetectionProcessor.swift in Sources */,
-				A72A7C712E6310BA0048B615 /* ImageCryptography.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
