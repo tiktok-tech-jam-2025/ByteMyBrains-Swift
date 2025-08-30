@@ -386,28 +386,6 @@ class OCRVisualizationViewController: UIViewController {
         }
     }
     
-//    // Download blurred image
-//    private func downloadBlurredImage() {
-//        let result = ocrResults[currentImageIndex]
-//
-//        guard let originalImage = loadedImages[result.assetIdentifier] else {
-//            showAlert(title: "Error", message: "Could not access original image")
-//            return
-//        }
-//
-//        // Create blurred image
-//        let blurredImage = createBlurredImageVisualization(for: result)
-//
-//        // Save to photo library
-//        UIImageWriteToSavedPhotosAlbum(blurredImage, self, #selector(image(_:didFinishSavingWithError:contextInfo:)), nil)
-//
-//        // Provide haptic feedback
-//        let successFeedback = UINotificationFeedbackGenerator()
-//        successFeedback.notificationOccurred(.success)
-//
-//        print("📥 Downloaded blurred image \(currentImageIndex + 1)")
-//    }
-    
     // Download blurred image - BLUR ONLY VERSION
     private func downloadBlurredImage() {
         let result = ocrResults[currentImageIndex]
@@ -429,46 +407,6 @@ class OCRVisualizationViewController: UIViewController {
         
         print("📥 Downloaded blur-only image \(currentImageIndex + 1)")
     }
-    
-    // Create blurred image for download
-//    private func createBlurredImageVisualization(for result: OCRResult) -> UIImage {
-//        guard let originalImage = loadedImages[result.assetIdentifier] else { return UIImage() }
-//
-//        let imageSize = originalImage.size
-//        let renderer = UIGraphicsImageRenderer(size: imageSize)
-//
-//        return renderer.image { context in
-//            let cgContext = context.cgContext
-//
-//            // Draw original image
-//            originalImage.draw(at: .zero)
-//
-//            // Draw text bounding boxes with blur applied to sensitive ones
-//            for (index, textBox) in result.textBoxes.enumerated() {
-//                drawBoundingBoxForDownload(
-//                    context: cgContext,
-//                    textBox: textBox,
-//                    imageSize: imageSize,
-//                    index: index,
-//                    shouldBlurSensitive: true
-//                )
-//            }
-//
-//            // Draw object bounding boxes with blur applied to sensitive ones
-//            let objectResult = objectDetectionResults.first { $0.assetIdentifier == result.assetIdentifier }
-//            if let objectResult = objectResult {
-//                for (index, objectBox) in objectResult.objectBoxes.enumerated() {
-//                    drawObjectBoundingBoxForDownload(
-//                        context: cgContext,
-//                        objectBox: objectBox,
-//                        imageSize: imageSize,
-//                        index: index,
-//                        shouldBlurSensitive: true
-//                    )
-//                }
-//            }
-//        }
-//    }
     
     // Create blurred image for download - BLUR ONLY, NO BOUNDING BOXES
     private func createBlurredImageVisualization(for result: OCRResult) -> UIImage {
@@ -503,63 +441,6 @@ class OCRVisualizationViewController: UIViewController {
             }
         }
     }
-    
-//    // Draw bounding box for download (always blur sensitive content)
-//    private func drawBoundingBoxForDownload(context: CGContext, textBox: TextBoundingBox, imageSize: CGSize, index: Int, shouldBlurSensitive: Bool) {
-//        let rect = VisionCoordinateConverter.convertBoundingBox(textBox.boundingBox, to: imageSize)
-//
-//        // Check if this text is sensitive
-//        let isSensitive = textBox.classification?.isSensitive ?? false
-//
-//        // Draw blur effect for sensitive text
-//        if isSensitive && shouldBlurSensitive {
-//            drawBlurEffect(context: context, rect: rect, imageSize: imageSize)
-//        }
-//
-//        // Draw bounding box
-//        let boxColor = UIColor.systemBlue
-//        context.setLineWidth(2.0)
-//        context.setStrokeColor(boxColor.cgColor)
-//        context.setFillColor(boxColor.withAlphaComponent(0.1).cgColor)
-//
-//        context.fill(rect)
-//        context.stroke(rect)
-//
-//        // Draw index label
-//        drawIndexLabel(context: context, index: index + 1, rect: rect, imageSize: imageSize)
-//
-//        // Draw red dot if sensitive
-//        if isSensitive {
-//            drawSensitiveDot(context: context, rect: rect, imageSize: imageSize)
-//        }
-//    }
-//
-//    // Draw object bounding box for download
-//    private func drawObjectBoundingBoxForDownload(context: CGContext, objectBox: ObjectBoundingBox, imageSize: CGSize, index: Int, shouldBlurSensitive: Bool) {
-//        let rect = VisionCoordinateConverter.convertBoundingBox(objectBox.boundingBox, to: imageSize)
-//
-//        // Draw blur effect for sensitive objects
-//        if objectBox.isSensitive && shouldBlurSensitive {
-//            drawBlurEffect(context: context, rect: rect, imageSize: imageSize)
-//        }
-//
-//        // Draw bounding box
-//        let boxColor = UIColor.systemGreen
-//        context.setLineWidth(2.0)
-//        context.setStrokeColor(boxColor.cgColor)
-//        context.setFillColor(boxColor.withAlphaComponent(0.1).cgColor)
-//
-//        context.fill(rect)
-//        context.stroke(rect)
-//
-//        // Draw index label
-//        drawObjectIndexLabel(context: context, index: index + 1, rect: rect, imageSize: imageSize)
-//
-//        // Draw red dot if sensitive
-//        if objectBox.isSensitive {
-//            drawSensitiveDot(context: context, rect: rect, imageSize: imageSize)
-//        }
-//    }
     
     // Handle save completion
     @objc private func image(_ image: UIImage, didFinishSavingWithError error: Error?, contextInfo: UnsafeRawPointer) {
