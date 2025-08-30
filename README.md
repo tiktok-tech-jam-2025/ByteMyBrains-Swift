@@ -50,6 +50,7 @@ We built Blurify as a native iOS app using Swift to ensure optimal performance a
 - Memory-efficient model loading for optimal iOS performance
 
 ## 🛠️ Technical Implementation
+![Sequence Diagram](./Public/sequence.png)
 ### ViewController.swift
 Main orchestrator handling photo selection and coordinating dual-processor architecture for OCR and Object Detection.
 
