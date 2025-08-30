@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for this sample's licensing information.
 
 Abstract:
 The app's main view controller object.
@@ -30,6 +30,14 @@ class ViewController: UIViewController {
     // Store OCRProcessor as a property
     private var ocrProcessor: OCRProcessor?
     
+    // Store ObjectDetectionProcessor as a property
+    private var objectDetectionProcessor: ObjectDetectionProcessor?
+    
+    // Combined results storage
+    private var combinedResults: [(ocrResult: OCRResult, objectResult: ObjectDetectionResult?)] = []
+    private var completedProcessors = 0
+    private let totalProcessors = 2
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         
@@ -40,6 +48,9 @@ class ViewController: UIViewController {
         } else {
             print("❌ OCR Button is NOT connected - check storyboard connection")
         }
+        
+        // Debug: Check if the text classification model is working
+        testTextClassification()
     }
     
     @IBAction func runOCROnSelectedImages(_ sender: UIButton) {
@@ -53,19 +64,73 @@ class ViewController: UIViewController {
             return
         }
         
-        print("✅ Images found, starting OCR processing...")
+        print("✅ Images found, starting OCR and Object Detection processing...")
         
         ocrButton.isEnabled = false
         ocrButton.setTitle("Processing...", for: .disabled)
         print("🔄 Button disabled and title changed")
         
+        // Reset combined results and processor counter
+        combinedResults = []
+        completedProcessors = 0
+        
+        // Start OCR processing
         ocrProcessor = OCRProcessor()
         ocrProcessor?.delegate = self
         print("🏭 OCR Processor created, delegate set")
         
-        print("🚀 About to call processImages...")
+        // Start Object Detection processing
+        objectDetectionProcessor = ObjectDetectionProcessor()
+        objectDetectionProcessor?.delegate = self
+        print("🤖 Object Detection Processor created, delegate set")
+        
+        print("🚀 About to call processImages for both processors...")
         ocrProcessor?.processImages(from: selection)
-        print("📤 processImages called")
+        objectDetectionProcessor?.processImages(from: selection)
+        print("📤 Both processImages called")
+    }
+    
+    private func testTextClassification() {
+        let manager = TextClassificationManager()
+        
+        print("\n🧪 Testing Text Classification")
+        print(String(repeating: "=", count: 50))
+        
+        // Print model status
+        let status = manager.getModelStatus()
+        print("📊 Model Status:")
+        for (key, value) in status {
+            print("   \(key): \(value)")
+        }
+        
+        // Test classification with sample texts
+        let testTexts = [
+            "S1234567A",
+            "T9876543B",
+            "john.doe@email.com",
+            "user@gmail.com",
+            "1234-5678-9012-3456",
+            "+65 9123 4567",
+            "91234567",
+            "01/01/1990",
+            "15-Mar-1985",
+            "123 Main Street Singapore 123456",
+            "Block 123 Toa Payoh Central",
+            "Hello world",
+            "This is just regular text"
+        ]
+        
+        print("\n🔍 Classification Results:")
+        print(String(repeating: "-", count: 50))
+        
+        for text in testTexts {
+            let result = manager.classify(text: text)
+            let emoji = result.isSensitive ? "🔴" : "🟢"
+            print("\(emoji) '\(text)'")
+            print("   → \(result.predictedClass.uppercased()) (confidence: \(String(format: "%.2f", result.confidence)), \(result.method), \(String(format: "%.1f", result.processingTime * 1000))ms)")
+        }
+        
+        print("\n" + String(repeating: "=", count: 50))
     }
 
     @IBAction func presentPickerForImagesAndVideos(_ sender: Any) {
@@ -83,11 +148,11 @@ class ViewController: UIViewController {
     private func presentPicker(filter: PHPickerFilter?) {
         var configuration = PHPickerConfiguration(photoLibrary: .shared())
         
-        // Set the filter type according to the user’s selection.
+        // Set the filter type according to the user's selection.
         configuration.filter = filter
         // Set the mode to avoid transcoding, if possible, if your app supports arbitrary image/video encodings.
         configuration.preferredAssetRepresentationMode = .current
-        // Set the selection behavior to respect the user’s selection order.
+        // Set the selection behavior to respect the user's selection order.
         configuration.selection = .ordered
         // Set the selection limit to enable multiselection.
         configuration.selectionLimit = 0
@@ -260,8 +325,6 @@ extension ViewController: PHPickerViewControllerDelegate {
 }
 
 // MARK: - OCR Integration Extension
-// Add this to the end of your ViewController.swift file
-
 extension ViewController: OCRProcessorDelegate {
     
     // MARK: - OCRProcessorDelegate Methods
@@ -286,16 +349,9 @@ extension ViewController: OCRProcessorDelegate {
     
     func ocrProcessor(_ processor: OCRProcessor, didCompleteWithResults results: [OCRResult]) {
         print("✅ OCR DELEGATE: didCompleteWithResults called with \(results.count) results")
-        DispatchQueue.main.async {
-            print("✅ OCR DELEGATE: On main thread - completing processing")
-            self.progressView.isHidden = true
-            self.handleOCRResults(results)
-            self.enableOCRButton()
-            
-            // Clear the processor when done
-            self.ocrProcessor = nil
-            print("✅ OCR DELEGATE: Processing complete, button re-enabled")
-        }
+        
+        // Store OCR results and check if both processors are complete
+        handleOCRCompletion(with: results)
     }
     
     func ocrProcessor(_ processor: OCRProcessor, didFailWithError error: Error) {
@@ -306,8 +362,9 @@ extension ViewController: OCRProcessorDelegate {
             self.showAlert(title: "OCR Error", message: error.localizedDescription)
             self.enableOCRButton()
             
-            // ADD THIS - Clear the processor when error occurs
+            // Clear processors when error occurs
             self.ocrProcessor = nil
+            self.objectDetectionProcessor = nil
             print("❌ OCR DELEGATE: Error handled, button re-enabled")
         }
     }
@@ -321,54 +378,167 @@ extension ViewController: OCRProcessorDelegate {
         print("🔄 OCR button enabled and title reset")
     }
     
-    private func handleOCRResults(_ results: [OCRResult]) {
-        print("📊 Handling OCR results - \(results.count) results")
+    private func showAlert(title: String, message: String) {
+        print("🚨 Showing alert: \(title) - \(message)")
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+}
+
+// MARK: - Object Detection Integration Extension
+extension ViewController: ObjectDetectionProcessorDelegate {
+    
+    func objectDetectionProcessor(_ processor: ObjectDetectionProcessor, didStartProcessing totalImages: Int) {
+        print("🤖 OBJECT DETECTION DELEGATE: didStartProcessing called with \(totalImages) images")
+        // Progress is already handled by OCR delegate
+    }
+    
+    func objectDetectionProcessor(_ processor: ObjectDetectionProcessor, didProcessImage at: Int, of total: Int) {
+        print("🤖 OBJECT DETECTION DELEGATE: didProcessImage called - \(at) of \(total)")
+        // Progress updates handled by OCR for simplicity
+    }
+    
+    func objectDetectionProcessor(_ processor: ObjectDetectionProcessor, didCompleteWithResults results: [ObjectDetectionResult]) {
+        print("✅ OBJECT DETECTION DELEGATE: didCompleteWithResults called with \(results.count) results")
         
-        var allTextBoxes: [TextBoundingBox] = []
-        var totalProcessingTime: TimeInterval = 0
-        var errorCount = 0
-        var totalTextFound = 0
-        
-        for (index, result) in results.enumerated() {
-            print("📋 Processing result \(index + 1)/\(results.count) for asset: \(result.assetIdentifier)")
+        // Store Object Detection results and check if both processors are complete
+        handleObjectDetectionCompletion(with: results)
+    }
+    
+    func objectDetectionProcessor(_ processor: ObjectDetectionProcessor, didFailWithError error: Error) {
+        print("❌ OBJECT DETECTION DELEGATE: didFailWithError called - \(error.localizedDescription)")
+        DispatchQueue.main.async {
+            print("❌ OBJECT DETECTION DELEGATE: On main thread - handling error")
+            self.showAlert(title: "Object Detection Error", message: error.localizedDescription)
             
-            if let error = result.error {
-                print("❌ OCR error for \(result.assetIdentifier): \(error.localizedDescription)")
+            // Continue with just OCR results if object detection fails
+            self.handleObjectDetectionCompletion(with: [])
+        }
+    }
+}
+
+// MARK: - Combined Results Handling
+extension ViewController {
+    
+    private func handleOCRCompletion(with ocrResults: [OCRResult]) {
+        // Store OCR results in combined structure
+        for ocrResult in ocrResults {
+            if let existingIndex = combinedResults.firstIndex(where: { $0.ocrResult.assetIdentifier == ocrResult.assetIdentifier }) {
+                combinedResults[existingIndex] = (ocrResult, combinedResults[existingIndex].objectResult)
+            } else {
+                combinedResults.append((ocrResult, nil))
+            }
+        }
+        
+        completedProcessors += 1
+        checkBothProcessorsComplete()
+    }
+    
+    private func handleObjectDetectionCompletion(with objectResults: [ObjectDetectionResult]) {
+        // Store Object Detection results in combined structure
+        for objectResult in objectResults {
+            if let existingIndex = combinedResults.firstIndex(where: { $0.ocrResult.assetIdentifier == objectResult.assetIdentifier }) {
+                combinedResults[existingIndex] = (combinedResults[existingIndex].ocrResult, objectResult)
+            } else {
+                // Create placeholder OCR result if object detection completes first
+                let placeholderOCR = OCRResult(assetIdentifier: objectResult.assetIdentifier, textBoxes: [], processingTime: 0, classificationTime: 0, error: nil)
+                combinedResults.append((placeholderOCR, objectResult))
+            }
+        }
+        
+        completedProcessors += 1
+        checkBothProcessorsComplete()
+    }
+    
+    private func checkBothProcessorsComplete() {
+        guard completedProcessors >= totalProcessors else { return }
+        
+        DispatchQueue.main.async {
+            print("🎉 Both processors completed!")
+            self.progressView.isHidden = true
+            self.handleCombinedResults()
+            self.enableOCRButton()
+            
+            // Clear processors when done
+            self.ocrProcessor = nil
+            self.objectDetectionProcessor = nil
+            print("✅ All processing complete, button re-enabled")
+        }
+    }
+    
+    private func handleCombinedResults() {
+        print("📊 Handling combined OCR and Object Detection results - \(combinedResults.count) results")
+        
+        var totalTextBoxes = 0
+        var totalObjectBoxes = 0
+        var totalOCRTime: TimeInterval = 0
+        var totalObjectDetectionTime: TimeInterval = 0
+        var errorCount = 0
+        var totalSensitiveText = 0
+        var totalSensitiveObjects = 0
+        
+        for (index, combinedResult) in combinedResults.enumerated() {
+            let ocrResult = combinedResult.ocrResult
+            let objectResult = combinedResult.objectResult
+            
+            print("📋 Processing combined result \(index + 1)/\(combinedResults.count) for asset: \(ocrResult.assetIdentifier)")
+            
+            // Process OCR results
+            if let error = ocrResult.error {
+                print("❌ OCR error for \(ocrResult.assetIdentifier): \(error.localizedDescription)")
                 errorCount += 1
             } else {
-                allTextBoxes.append(contentsOf: result.textBoxes)
-                totalProcessingTime += result.processingTime
-                totalTextFound += result.textBoxes.count
+                totalTextBoxes += ocrResult.textBoxes.count
+                totalOCRTime += ocrResult.totalProcessingTime
+                totalSensitiveText += ocrResult.sensitiveTextCount
                 
-                print("✅ OCR completed for \(result.assetIdentifier):")
-                print("   📝 Found \(result.textBoxes.count) text regions")
-                print("   ⏱️ Processing time: \(String(format: "%.2f", result.processingTime))s")
-                
-                for (textIndex, textBox) in result.textBoxes.enumerated() {
-                    print("   📄 Text \(textIndex + 1): '\(textBox.text)' (confidence: \(String(format: "%.2f", textBox.confidence)))")
-                    print("   📍 Bounding box: \(textBox.boundingBox)")
+                print("✅ OCR completed for \(ocrResult.assetIdentifier):")
+                print("   📝 Found \(ocrResult.textBoxes.count) text regions (\(ocrResult.sensitiveTextCount) sensitive)")
+                print("   ⏱️ Processing time: \(String(format: "%.2f", ocrResult.totalProcessingTime))s")
+            }
+            
+            // Process Object Detection results
+            if let objectResult = objectResult {
+                if let error = objectResult.error {
+                    print("❌ Object Detection error for \(objectResult.assetIdentifier): \(error.localizedDescription)")
+                    errorCount += 1
+                } else {
+                    totalObjectBoxes += objectResult.totalObjectCount
+                    totalObjectDetectionTime += objectResult.processingTime
+                    totalSensitiveObjects += objectResult.sensitiveObjectCount
+                    
+                    print("✅ Object Detection completed for \(objectResult.assetIdentifier):")
+                    print("   🎯 Found \(objectResult.totalObjectCount) objects (\(objectResult.sensitiveObjectCount) sensitive)")
+                    print("   ⏱️ Processing time: \(String(format: "%.2f", objectResult.processingTime))s")
                 }
             }
         }
         
         let message = """
-        OCR Processing Complete!
+        Processing Complete!
         
-        Images processed: \(results.count)
-        Text regions found: \(totalTextFound)
-        Total processing time: \(String(format: "%.2f", totalProcessingTime))s
-        Average time per image: \(String(format: "%.2f", totalProcessingTime / Double(results.count)))s
-        Errors: \(errorCount)
+        Images processed: \(combinedResults.count)
+        
+        OCR Results:
+        • Text regions: \(totalTextBoxes) (\(totalSensitiveText) sensitive)
+        • Processing time: \(String(format: "%.2f", totalOCRTime))s
+        
+        Object Detection Results:
+        • Objects detected: \(totalObjectBoxes) (\(totalSensitiveObjects) sensitive)
+        • Processing time: \(String(format: "%.2f", totalObjectDetectionTime))s
+        
+        Total errors: \(errorCount)
         """
         
-        print("🎉 Final OCR Summary:")
+        print("🎉 Final Combined Summary:")
         print(message)
         
         // Show results alert with option to view visualization
-        let alert = UIAlertController(title: "OCR Results", message: message, preferredStyle: .alert)
+        let alert = UIAlertController(title: "Processing Results", message: message, preferredStyle: .alert)
        
         alert.addAction(UIAlertAction(title: "View Visualization", style: .default) { _ in
-            self.showOCRVisualization(for: results)
+            self.showCombinedVisualization()
         })
        
         alert.addAction(UIAlertAction(title: "OK", style: .default))
@@ -376,25 +546,15 @@ extension ViewController: OCRProcessorDelegate {
         present(alert, animated: true)
     }
     
-    private func displayDetailedOCRResults(_ textBoxes: [TextBoundingBox]) {
-        // Print all extracted text for debugging
-        print("\n=== ALL EXTRACTED TEXT ===")
-        for (index, textBox) in textBoxes.enumerated() {
-            print("\(index + 1). \"\(textBox.text)\" (confidence: \(String(format: "%.2f", textBox.confidence)))")
-        }
-        print("========================\n")
-    }
-    
-    private func showAlert(title: String, message: String) {
-        print("🚨 Showing alert: \(title) - \(message)")
-        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        present(alert, animated: true)
-    }
-    
-    private func showOCRVisualization(for results: [OCRResult]) {
+    private func showCombinedVisualization() {
         let visualizationVC = OCRVisualizationViewController()
-        visualizationVC.ocrResults = results
+        
+        // Pass OCR results (existing)
+        visualizationVC.ocrResults = combinedResults.map { $0.ocrResult }
+        
+        // Pass Object Detection results
+        visualizationVC.objectDetectionResults = combinedResults.compactMap { $0.objectResult }
+        
         visualizationVC.selection = selection
         
         let navController = UINavigationController(rootViewController: visualizationVC)

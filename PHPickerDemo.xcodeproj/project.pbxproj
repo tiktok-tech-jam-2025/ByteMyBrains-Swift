@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 50;
+	objectVersion = 73;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -13,6 +13,9 @@
 		261C3FB02481C140005A1EFD /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 261C3FAE2481C140005A1EFD /* Main.storyboard */; };
 		261C3FB22481C141005A1EFD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 261C3FB12481C141005A1EFD /* Assets.xcassets */; };
 		261C3FB52481C141005A1EFD /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 261C3FB32481C141005A1EFD /* LaunchScreen.storyboard */; };
+		A72A7C402E62C8C10048B615 /* ObjectDetectionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72A7C3E2E62C8C10048B615 /* ObjectDetectionModels.swift */; };
+		A72A7C412E62C8C10048B615 /* ObjectDetectionProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72A7C3F2E62C8C10048B615 /* ObjectDetectionProcessor.swift */; };
+		A72A7C432E62C8DE0048B615 /* TextClassificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72A7C422E62C8DE0048B615 /* TextClassificationManager.swift */; };
 		A77AECDF2E61727700AE5CD0 /* OCRProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77AECDE2E61727700AE5CD0 /* OCRProcessor.swift */; };
 		A77AECE12E61906A00AE5CD0 /* OCRVisualizationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77AECE02E61906A00AE5CD0 /* OCRVisualizationViewController.swift */; };
 /* End PBXBuildFile section */
@@ -27,11 +30,41 @@
 		261C3FB42481C141005A1EFD /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		261C3FB62481C141005A1EFD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		55E258A9AA24CB9B28978F83 /* LICENSE.txt */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = LICENSE.txt; sourceTree = "<group>"; };
+		A72A7C3E2E62C8C10048B615 /* ObjectDetectionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectDetectionModels.swift; sourceTree = "<group>"; };
+		A72A7C3F2E62C8C10048B615 /* ObjectDetectionProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectDetectionProcessor.swift; sourceTree = "<group>"; };
+		A72A7C422E62C8DE0048B615 /* TextClassificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextClassificationManager.swift; sourceTree = "<group>"; };
 		A77AECDE2E61727700AE5CD0 /* OCRProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRProcessor.swift; sourceTree = "<group>"; };
 		A77AECE02E61906A00AE5CD0 /* OCRVisualizationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRVisualizationViewController.swift; sourceTree = "<group>"; };
 		B0469A2CDC8F91A0264F220C /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		D0D1E72DF0C2B42E1393B543 /* SampleCode.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = SampleCode.xcconfig; path = Configuration/SampleCode.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A72A7C562E62CDF60048B615 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				classifier_only.pkl,
+				model_info.pkl,
+				regex_transformer.pkl,
+				tfidf_transformer.pkl,
+			);
+			target = 261C3FA42481C140005A1EFD /* PHPickerDemo */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		A72A7C592E62CE860048B615 /* PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = 261C3FA32481C140005A1EFD /* Resources */;
+			membershipExceptions = (
+				yolo12n.mlpackage,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A72A7C452E62C9ED0048B615 /* Models */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (A72A7C562E62CDF60048B615 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, A72A7C592E62CE860048B615 /* PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Models; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		261C3FA22481C140005A1EFD /* Frameworks */ = {
@@ -48,6 +81,7 @@
 			isa = PBXGroup;
 			children = (
 				B0469A2CDC8F91A0264F220C /* README.md */,
+				A72A7C452E62C9ED0048B615 /* Models */,
 				261C3FA72481C140005A1EFD /* PHPickerDemo */,
 				261C3FA62481C140005A1EFD /* Products */,
 				D1381FAC03011543C8998FF3 /* Configuration */,
@@ -71,6 +105,9 @@
 				261C3FAC2481C140005A1EFD /* ViewController.swift */,
 				A77AECDE2E61727700AE5CD0 /* OCRProcessor.swift */,
 				A77AECE02E61906A00AE5CD0 /* OCRVisualizationViewController.swift */,
+				A72A7C3E2E62C8C10048B615 /* ObjectDetectionModels.swift */,
+				A72A7C3F2E62C8C10048B615 /* ObjectDetectionProcessor.swift */,
+				A72A7C422E62C8DE0048B615 /* TextClassificationManager.swift */,
 				261C3FAE2481C140005A1EFD /* Main.storyboard */,
 				261C3FB12481C141005A1EFD /* Assets.xcassets */,
 				261C3FB32481C141005A1EFD /* LaunchScreen.storyboard */,
@@ -131,7 +168,6 @@
 				};
 			};
 			buildConfigurationList = 261C3FA02481C140005A1EFD /* Build configuration list for PBXProject "PHPickerDemo" */;
-			compatibilityVersion = "Xcode 9.3";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -139,6 +175,7 @@
 				Base,
 			);
 			mainGroup = 261C3F9C2481C140005A1EFD;
+			preferredProjectObjectVersion = 50;
 			productRefGroup = 261C3FA62481C140005A1EFD /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -171,6 +208,9 @@
 				A77AECE12E61906A00AE5CD0 /* OCRVisualizationViewController.swift in Sources */,
 				261C3FA92481C140005A1EFD /* AppDelegate.swift in Sources */,
 				261C3FAB2481C140005A1EFD /* SceneDelegate.swift in Sources */,
+				A72A7C402E62C8C10048B615 /* ObjectDetectionModels.swift in Sources */,
+				A72A7C432E62C8DE0048B615 /* TextClassificationManager.swift in Sources */,
+				A72A7C412E62C8C10048B615 /* ObjectDetectionProcessor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

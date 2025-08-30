@@ -6,13 +6,6 @@
 //  Copyright © 2025 Apple. All rights reserved.
 //
 
-//
-//  OCRVisualizationViewController.swift
-//  PHPickerDemo
-//
-//  Created by Yeo Meng Han on 29/8/25.
-//
-
 import UIKit
 import PhotosUI
 
@@ -23,12 +16,18 @@ class OCRVisualizationViewController: UIViewController {
     private var segmentedControl: UISegmentedControl!
     private var infoLabel: UILabel!
     private var textDetailsView: UITextView!
+    private var controlView: UIView!
     
     var ocrResults: [OCRResult] = []
+    var objectDetectionResults: [ObjectDetectionResult] = []
     var selection: [String: PHPickerResult] = [:]
     
     private var currentImageIndex = 0
     private var loadedImages: [String: UIImage] = [:]
+    
+    // Blur functionality properties
+    private var imageBlurStates: [String: Bool] = [:]
+    private var imageButtons: [String: UIButton] = [:]
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -38,7 +37,7 @@ class OCRVisualizationViewController: UIViewController {
     
     private func setupUI() {
         view.backgroundColor = .systemBackground
-        title = "OCR Visualization"
+        title = "OCR & Object Detection Visualization"
         
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .done,
@@ -90,11 +89,17 @@ class OCRVisualizationViewController: UIViewController {
         imageView.contentMode = .scaleAspectFit
         imageView.backgroundColor = .clear
         
+        // Create control view for blur/download button
+        controlView = UIView()
+        controlView.translatesAutoresizingMaskIntoConstraints = false
+        controlView.backgroundColor = .systemGray6
+        controlView.layer.cornerRadius = 12
+        
         // Create text details view
         textDetailsView = UITextView()
         textDetailsView.translatesAutoresizingMaskIntoConstraints = false
         textDetailsView.isEditable = false
-        textDetailsView.font = UIFont.systemFont(ofSize: 14)
+        textDetailsView.font = UIFont.systemFont(ofSize: 12)
         textDetailsView.layer.borderColor = UIColor.systemGray4.cgColor
         textDetailsView.layer.borderWidth = 1
         textDetailsView.layer.cornerRadius = 8
@@ -104,6 +109,7 @@ class OCRVisualizationViewController: UIViewController {
         view.addSubview(segmentedControl)
         view.addSubview(infoLabel)
         view.addSubview(scrollView)
+        view.addSubview(controlView)
         view.addSubview(textDetailsView)
         scrollView.addSubview(imageView)
         
@@ -123,7 +129,7 @@ class OCRVisualizationViewController: UIViewController {
             scrollView.topAnchor.constraint(equalTo: infoLabel.bottomAnchor, constant: 8),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: textDetailsView.topAnchor, constant: -8),
+            scrollView.bottomAnchor.constraint(equalTo: controlView.topAnchor, constant: -8),
             
             // Image view
             imageView.topAnchor.constraint(equalTo: scrollView.topAnchor),
@@ -133,11 +139,17 @@ class OCRVisualizationViewController: UIViewController {
             imageView.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
             imageView.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
             
+            // Control view (blur/download button area)
+            controlView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            controlView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            controlView.bottomAnchor.constraint(equalTo: textDetailsView.topAnchor, constant: -8),
+            controlView.heightAnchor.constraint(equalToConstant: 60),
+            
             // Text details view
             textDetailsView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             textDetailsView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             textDetailsView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
-            textDetailsView.heightAnchor.constraint(equalToConstant: 200)
+            textDetailsView.heightAnchor.constraint(equalToConstant: 150)
         ])
     }
     
@@ -205,6 +217,9 @@ class OCRVisualizationViewController: UIViewController {
         // Update info label
         updateInfoLabel(for: result)
         
+        // Update control view
+        updateControlView(for: result)
+        
         // Update text details
         updateTextDetails(for: result)
         
@@ -221,33 +236,387 @@ class OCRVisualizationViewController: UIViewController {
     
     private func updateInfoLabel(for result: OCRResult) {
         let textCount = result.textBoxes.count
-        let processingTime = String(format: "%.2f", result.processingTime)
+        let ocrProcessingTime = String(format: "%.2f", result.processingTime)
+        
+        // Get corresponding object detection result
+        let objectResult = objectDetectionResults.first { $0.assetIdentifier == result.assetIdentifier }
+        let objectCount = objectResult?.totalObjectCount ?? 0
+        let objectProcessingTime = String(format: "%.2f", objectResult?.processingTime ?? 0)
         
         if let error = result.error {
             infoLabel.text = "❌ Error: \(error.localizedDescription)"
             infoLabel.textColor = .systemRed
         } else {
-            infoLabel.text = "✅ Found \(textCount) text regions • Processing time: \(processingTime)s"
+            // Show both text and object counts
+            infoLabel.text = "✅ Text: \(textCount) regions (\(ocrProcessingTime)s) • Objects: \(objectCount) detected (\(objectProcessingTime)s)"
             infoLabel.textColor = .label
         }
     }
     
-    private func updateTextDetails(for result: OCRResult) {
-        if result.textBoxes.isEmpty {
-            textDetailsView.text = "No text detected in this image."
+    // Update control view based on sensitive content
+    private func updateControlView(for result: OCRResult) {
+        // Clear existing subviews
+        controlView.subviews.forEach { $0.removeFromSuperview() }
+        
+        // Check if image has sensitive content from BOTH OCR and Object Detection
+        let hasSensitiveText = result.textBoxes.contains { $0.classification?.isSensitive == true }
+        
+        // Check for sensitive objects
+        let objectResult = objectDetectionResults.first { $0.assetIdentifier == result.assetIdentifier }
+        let hasSensitiveObjects = objectResult?.hasSensitiveObjects ?? false
+        
+        // Combine both checks
+        let hasSensitiveContent = hasSensitiveText || hasSensitiveObjects
+        
+        if hasSensitiveContent {
+            // Create blur & download button
+            let button = createBlurDownloadButton(for: result)
+            controlView.addSubview(button)
+            
+            // Store button reference
+            imageButtons[result.assetIdentifier] = button
+            
+            // Center the button in container
+            button.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                button.centerXAnchor.constraint(equalTo: controlView.centerXAnchor),
+                button.centerYAnchor.constraint(equalTo: controlView.centerYAnchor),
+                button.widthAnchor.constraint(equalToConstant: 200),
+                button.heightAnchor.constraint(equalToConstant: 44)
+            ])
         } else {
-            var details = "Detected Text:\n\n"
+            // Create "All's Good" label
+            let label = createAllGoodLabel()
+            controlView.addSubview(label)
+            
+            // Center the label in container
+            label.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                label.centerXAnchor.constraint(equalTo: controlView.centerXAnchor),
+                label.centerYAnchor.constraint(equalTo: controlView.centerYAnchor)
+            ])
+        }
+    }
+    
+    // Create blur & download button
+    private func createBlurDownloadButton(for result: OCRResult) -> UIButton {
+        let button = UIButton(type: .system)
+        button.tag = currentImageIndex
+        
+        // Initial state - not blurred
+        updateButtonAppearance(button: button, isBlurred: false)
+        
+        // Add action
+        button.addTarget(self, action: #selector(blurAndDownloadTapped(_:)), for: .touchUpInside)
+        
+        // Style the button
+        button.layer.cornerRadius = 22
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+        
+        // Add shadow
+        button.layer.shadowColor = UIColor.black.cgColor
+        button.layer.shadowOffset = CGSize(width: 0, height: 2)
+        button.layer.shadowOpacity = 0.1
+        button.layer.shadowRadius = 4
+        
+        return button
+    }
+    
+    // Update button appearance based on blur state
+    private func updateButtonAppearance(button: UIButton, isBlurred: Bool) {
+        if isBlurred {
+            button.setTitle("📥 Download Blurred Image", for: .normal)
+            button.backgroundColor = UIColor.systemGreen
+            button.setTitleColor(.white, for: .normal)
+        } else {
+            button.setTitle("🔒 Blur & Download Image", for: .normal)
+            button.backgroundColor = UIColor.systemBlue
+            button.setTitleColor(.white, for: .normal)
+        }
+    }
+    
+    // Create "All's Good" label
+    private func createAllGoodLabel() -> UILabel {
+        let label = UILabel()
+        label.text = "✅ All's Good - No Sensitive Content"
+        label.textAlignment = .center
+        label.font = UIFont.systemFont(ofSize: 16, weight: .medium)
+        label.textColor = UIColor.systemGreen
+        label.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.1)
+        label.layer.cornerRadius = 8
+        label.layer.masksToBounds = true
+        
+        // Add padding
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.widthAnchor.constraint(equalToConstant: 280).isActive = true
+        label.heightAnchor.constraint(equalToConstant: 36).isActive = true
+        
+        return label
+    }
+    
+    // Handle button tap action
+    @objc private func blurAndDownloadTapped(_ sender: UIButton) {
+        let result = ocrResults[currentImageIndex]
+        let assetId = result.assetIdentifier
+        
+        // Get current blur state
+        let currentlyBlurred = imageBlurStates[assetId] ?? false
+        
+        if !currentlyBlurred {
+            // First tap - blur the image
+            imageBlurStates[assetId] = true
+            updateButtonAppearance(button: sender, isBlurred: true)
+            
+            // Re-render current image with blur
+            if let visualizationImage = createVisualizationImage(for: result) {
+                imageView.image = visualizationImage
+                scrollView.zoomScale = 1.0
+                imageView.frame.size = visualizationImage.size
+                scrollView.contentSize = visualizationImage.size
+            }
+            
+            // Provide haptic feedback
+            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+            impactFeedback.impactOccurred()
+            
+            print("🔒 Image \(currentImageIndex + 1) sensitive content blurred")
+        } else {
+            // Second tap - download the blurred image
+            downloadBlurredImage()
+        }
+    }
+    
+//    // Download blurred image
+//    private func downloadBlurredImage() {
+//        let result = ocrResults[currentImageIndex]
+//
+//        guard let originalImage = loadedImages[result.assetIdentifier] else {
+//            showAlert(title: "Error", message: "Could not access original image")
+//            return
+//        }
+//
+//        // Create blurred image
+//        let blurredImage = createBlurredImageVisualization(for: result)
+//
+//        // Save to photo library
+//        UIImageWriteToSavedPhotosAlbum(blurredImage, self, #selector(image(_:didFinishSavingWithError:contextInfo:)), nil)
+//
+//        // Provide haptic feedback
+//        let successFeedback = UINotificationFeedbackGenerator()
+//        successFeedback.notificationOccurred(.success)
+//
+//        print("📥 Downloaded blurred image \(currentImageIndex + 1)")
+//    }
+    
+    // Download blurred image - BLUR ONLY VERSION
+    private func downloadBlurredImage() {
+        let result = ocrResults[currentImageIndex]
+        
+        guard let originalImage = loadedImages[result.assetIdentifier] else {
+            showAlert(title: "Error", message: "Could not access original image")
+            return
+        }
+        
+        // Create image with ONLY blur applied to sensitive areas
+        let blurredImage = createBlurredImageVisualization(for: result)
+        
+        // Save to photo library
+        UIImageWriteToSavedPhotosAlbum(blurredImage, self, #selector(image(_:didFinishSavingWithError:contextInfo:)), nil)
+        
+        // Provide haptic feedback
+        let successFeedback = UINotificationFeedbackGenerator()
+        successFeedback.notificationOccurred(.success)
+        
+        print("📥 Downloaded blur-only image \(currentImageIndex + 1)")
+    }
+    
+    // Create blurred image for download
+//    private func createBlurredImageVisualization(for result: OCRResult) -> UIImage {
+//        guard let originalImage = loadedImages[result.assetIdentifier] else { return UIImage() }
+//
+//        let imageSize = originalImage.size
+//        let renderer = UIGraphicsImageRenderer(size: imageSize)
+//
+//        return renderer.image { context in
+//            let cgContext = context.cgContext
+//
+//            // Draw original image
+//            originalImage.draw(at: .zero)
+//
+//            // Draw text bounding boxes with blur applied to sensitive ones
+//            for (index, textBox) in result.textBoxes.enumerated() {
+//                drawBoundingBoxForDownload(
+//                    context: cgContext,
+//                    textBox: textBox,
+//                    imageSize: imageSize,
+//                    index: index,
+//                    shouldBlurSensitive: true
+//                )
+//            }
+//
+//            // Draw object bounding boxes with blur applied to sensitive ones
+//            let objectResult = objectDetectionResults.first { $0.assetIdentifier == result.assetIdentifier }
+//            if let objectResult = objectResult {
+//                for (index, objectBox) in objectResult.objectBoxes.enumerated() {
+//                    drawObjectBoundingBoxForDownload(
+//                        context: cgContext,
+//                        objectBox: objectBox,
+//                        imageSize: imageSize,
+//                        index: index,
+//                        shouldBlurSensitive: true
+//                    )
+//                }
+//            }
+//        }
+//    }
+    
+    // Create blurred image for download - BLUR ONLY, NO BOUNDING BOXES
+    private func createBlurredImageVisualization(for result: OCRResult) -> UIImage {
+        guard let originalImage = loadedImages[result.assetIdentifier] else { return UIImage() }
+        
+        let imageSize = originalImage.size
+        let renderer = UIGraphicsImageRenderer(size: imageSize)
+        
+        return renderer.image { context in
+            let cgContext = context.cgContext
+            
+            // Draw original image
+            originalImage.draw(at: .zero)
+            
+            // ONLY apply blur to sensitive text regions - NO bounding boxes
+            for textBox in result.textBoxes {
+                if textBox.classification?.isSensitive == true {
+                    let rect = VisionCoordinateConverter.convertBoundingBox(textBox.boundingBox, to: imageSize)
+                    drawBlurEffect(context: cgContext, rect: rect, imageSize: imageSize)
+                }
+            }
+            
+            // ONLY apply blur to sensitive object regions - NO bounding boxes
+            let objectResult = objectDetectionResults.first { $0.assetIdentifier == result.assetIdentifier }
+            if let objectResult = objectResult {
+                for objectBox in objectResult.objectBoxes {
+                    if objectBox.isSensitive {
+                        let rect = VisionCoordinateConverter.convertBoundingBox(objectBox.boundingBox, to: imageSize)
+                        drawBlurEffect(context: cgContext, rect: rect, imageSize: imageSize)
+                    }
+                }
+            }
+        }
+    }
+    
+//    // Draw bounding box for download (always blur sensitive content)
+//    private func drawBoundingBoxForDownload(context: CGContext, textBox: TextBoundingBox, imageSize: CGSize, index: Int, shouldBlurSensitive: Bool) {
+//        let rect = VisionCoordinateConverter.convertBoundingBox(textBox.boundingBox, to: imageSize)
+//
+//        // Check if this text is sensitive
+//        let isSensitive = textBox.classification?.isSensitive ?? false
+//
+//        // Draw blur effect for sensitive text
+//        if isSensitive && shouldBlurSensitive {
+//            drawBlurEffect(context: context, rect: rect, imageSize: imageSize)
+//        }
+//
+//        // Draw bounding box
+//        let boxColor = UIColor.systemBlue
+//        context.setLineWidth(2.0)
+//        context.setStrokeColor(boxColor.cgColor)
+//        context.setFillColor(boxColor.withAlphaComponent(0.1).cgColor)
+//
+//        context.fill(rect)
+//        context.stroke(rect)
+//
+//        // Draw index label
+//        drawIndexLabel(context: context, index: index + 1, rect: rect, imageSize: imageSize)
+//
+//        // Draw red dot if sensitive
+//        if isSensitive {
+//            drawSensitiveDot(context: context, rect: rect, imageSize: imageSize)
+//        }
+//    }
+//
+//    // Draw object bounding box for download
+//    private func drawObjectBoundingBoxForDownload(context: CGContext, objectBox: ObjectBoundingBox, imageSize: CGSize, index: Int, shouldBlurSensitive: Bool) {
+//        let rect = VisionCoordinateConverter.convertBoundingBox(objectBox.boundingBox, to: imageSize)
+//
+//        // Draw blur effect for sensitive objects
+//        if objectBox.isSensitive && shouldBlurSensitive {
+//            drawBlurEffect(context: context, rect: rect, imageSize: imageSize)
+//        }
+//
+//        // Draw bounding box
+//        let boxColor = UIColor.systemGreen
+//        context.setLineWidth(2.0)
+//        context.setStrokeColor(boxColor.cgColor)
+//        context.setFillColor(boxColor.withAlphaComponent(0.1).cgColor)
+//
+//        context.fill(rect)
+//        context.stroke(rect)
+//
+//        // Draw index label
+//        drawObjectIndexLabel(context: context, index: index + 1, rect: rect, imageSize: imageSize)
+//
+//        // Draw red dot if sensitive
+//        if objectBox.isSensitive {
+//            drawSensitiveDot(context: context, rect: rect, imageSize: imageSize)
+//        }
+//    }
+    
+    // Handle save completion
+    @objc private func image(_ image: UIImage, didFinishSavingWithError error: Error?, contextInfo: UnsafeRawPointer) {
+        DispatchQueue.main.async {
+            if let error = error {
+                self.showAlert(title: "Save Error", message: "Failed to save image: \(error.localizedDescription)")
+            } else {
+                self.showAlert(title: "Success", message: "Blurred image saved to Photos!")
+            }
+        }
+    }
+    
+    private func updateTextDetails(for result: OCRResult) {
+        var details = ""
+        
+        // Object Detection details first
+        let objectResult = objectDetectionResults.first { $0.assetIdentifier == result.assetIdentifier }
+        
+        if let objectResult = objectResult, !objectResult.objectBoxes.isEmpty {
+            details += "🎯 DETECTED OBJECTS:\n\n"
+            for (index, objectBox) in objectResult.objectBoxes.enumerated() {
+                let confidence = String(format: "%.2f", objectBox.confidence)
+                let sensitiveEmoji = objectBox.isSensitive ? "🔴" : "🟢"
+                details += "\(sensitiveEmoji) \(index + 1). \(objectBox.displayName)\n"
+                details += "   Confidence: \(confidence)\n"
+                if objectBox.isSensitive, let reason = objectBox.sensitivityReason {
+                    details += "   Reason: \(reason)\n"
+                }
+                details += "   Bounds: x=\(String(format: "%.3f", objectBox.boundingBox.origin.x)), "
+                details += "y=\(String(format: "%.3f", objectBox.boundingBox.origin.y)), "
+                details += "w=\(String(format: "%.3f", objectBox.boundingBox.width)), "
+                details += "h=\(String(format: "%.3f", objectBox.boundingBox.height))\n\n"
+            }
+            details += "\n"
+        }
+        
+        // Text details
+        if result.textBoxes.isEmpty {
+            details += "📝 DETECTED TEXT:\n\nNo text detected in this image."
+        } else {
+            details += "📝 DETECTED TEXT:\n\n"
             for (index, textBox) in result.textBoxes.enumerated() {
                 let confidence = String(format: "%.2f", textBox.confidence)
-                details += "\(index + 1). \"\(textBox.text)\"\n"
+                let sensitiveEmoji = textBox.classification?.isSensitive == true ? "🔴" : "🟢"
+                details += "\(sensitiveEmoji) \(index + 1). \"\(textBox.text)\"\n"
                 details += "   Confidence: \(confidence)\n"
+                if let classification = textBox.classification, classification.isSensitive {
+                    details += "   Type: \(classification.predictedClass.uppercased())\n"
+                }
                 details += "   Bounds: x=\(String(format: "%.3f", textBox.boundingBox.origin.x)), "
                 details += "y=\(String(format: "%.3f", textBox.boundingBox.origin.y)), "
                 details += "w=\(String(format: "%.3f", textBox.boundingBox.width)), "
                 details += "h=\(String(format: "%.3f", textBox.boundingBox.height))\n\n"
             }
-            textDetailsView.text = details
         }
+        
+        textDetailsView.text = details
     }
     
     private func createVisualizationImage(for result: OCRResult) -> UIImage? {
@@ -267,12 +636,25 @@ class OCRVisualizationViewController: UIViewController {
         // Draw original image
         originalImage.draw(at: .zero)
         
-        // Draw bounding boxes
+        // Draw text bounding boxes
         for (index, textBox) in result.textBoxes.enumerated() {
             drawBoundingBox(context: context,
                           textBox: textBox,
                           imageSize: originalImage.size,
-                          index: index)
+                          index: index,
+                          result: result)
+        }
+        
+        // Draw object detection bounding boxes
+        let objectResult = objectDetectionResults.first { $0.assetIdentifier == result.assetIdentifier }
+        if let objectResult = objectResult {
+            for (index, objectBox) in objectResult.objectBoxes.enumerated() {
+                drawObjectBoundingBox(context: context,
+                                    objectBox: objectBox,
+                                    imageSize: originalImage.size,
+                                    index: index,
+                                    result: result)
+            }
         }
         
         let visualizationImage = UIGraphicsGetImageFromCurrentImageContext()
@@ -281,63 +663,198 @@ class OCRVisualizationViewController: UIViewController {
         return visualizationImage
     }
     
-    private func drawBoundingBox(context: CGContext, textBox: TextBoundingBox, imageSize: CGSize, index: Int) {
-        // Convert Vision coordinates to UIKit coordinates
+    private func drawBoundingBox(context: CGContext, textBox: TextBoundingBox, imageSize: CGSize, index: Int, result: OCRResult) {
         let rect = VisionCoordinateConverter.convertBoundingBox(textBox.boundingBox, to: imageSize)
         
-        // Set up drawing properties
-        context.setLineWidth(3.0)
-        context.setStrokeColor(UIColor.systemBlue.cgColor)
-        context.setFillColor(UIColor.systemBlue.withAlphaComponent(0.2).cgColor)
+        // Check if this text is sensitive and if blur is enabled for this image
+        let isSensitive = textBox.classification?.isSensitive ?? false
+        let shouldBlur = isSensitive && (imageBlurStates[result.assetIdentifier] ?? false)
         
-        // Draw filled rectangle
+        // Draw blur effect for sensitive text if enabled
+        if shouldBlur {
+            drawBlurEffect(context: context, rect: rect, imageSize: imageSize)
+        }
+        
+        // Default color for text bounding box
+        let boxColor = UIColor.systemBlue
+        
+        // Draw bounding box
+        context.setLineWidth(2.0)
+        context.setStrokeColor(boxColor.cgColor)
+        context.setFillColor(boxColor.withAlphaComponent(0.1).cgColor)
+        
         context.fill(rect)
-        
-        // Draw border
         context.stroke(rect)
         
-        // Draw index number
+        // Draw index label
         drawIndexLabel(context: context, index: index + 1, rect: rect, imageSize: imageSize)
+        
+        // Draw red dot if sensitive (always shown regardless of blur state)
+        if isSensitive {
+            drawSensitiveDot(context: context, rect: rect, imageSize: imageSize)
+        }
     }
     
+    // Draw object bounding box
+    private func drawObjectBoundingBox(context: CGContext, objectBox: ObjectBoundingBox, imageSize: CGSize, index: Int, result: OCRResult) {
+        let rect = VisionCoordinateConverter.convertBoundingBox(objectBox.boundingBox, to: imageSize)
+        
+        // Check if this object should be blurred
+        let shouldBlur = objectBox.isSensitive && (imageBlurStates[result.assetIdentifier] ?? false)
+        
+        // Draw blur effect for sensitive objects if enabled
+        if shouldBlur {
+            drawBlurEffect(context: context, rect: rect, imageSize: imageSize)
+        }
+        
+        // Use different color for object boxes (green instead of blue)
+        let boxColor = UIColor.systemGreen
+        
+        // Draw bounding box
+        context.setLineWidth(2.0)
+        context.setStrokeColor(boxColor.cgColor)
+        context.setFillColor(boxColor.withAlphaComponent(0.1).cgColor)
+        
+        context.fill(rect)
+        context.stroke(rect)
+        
+        // Draw square index label for objects (different from circular text labels)
+        drawObjectIndexLabel(context: context, index: index + 1, rect: rect, imageSize: imageSize)
+        
+        // Draw red dot if sensitive
+        if objectBox.isSensitive {
+            drawSensitiveDot(context: context, rect: rect, imageSize: imageSize)
+        }
+    }
+    
+    // Draw blur effect
+    private func drawBlurEffect(context: CGContext, rect: CGRect, imageSize: CGSize) {
+        // Create a pixelated/mosaic effect for sensitive areas
+        let pixelSize: CGFloat = 8.0
+        let expandedRect = rect.insetBy(dx: -2, dy: -2)
+        
+        context.saveGState()
+        
+        // Create a mosaic/pixelated effect
+        let rows = Int(expandedRect.height / pixelSize) + 1
+        let cols = Int(expandedRect.width / pixelSize) + 1
+        
+        for row in 0..<rows {
+            for col in 0..<cols {
+                let pixelRect = CGRect(
+                    x: expandedRect.origin.x + CGFloat(col) * pixelSize,
+                    y: expandedRect.origin.y + CGFloat(row) * pixelSize,
+                    width: pixelSize,
+                    height: pixelSize
+                )
+                
+                // Use random gray colors to simulate pixelation
+                let grayValue = CGFloat.random(in: 0.7...0.9)
+                context.setFillColor(UIColor(white: grayValue, alpha: 0.9).cgColor)
+                context.fill(pixelRect)
+            }
+        }
+        
+        context.restoreGState()
+    }
+
     private func drawIndexLabel(context: CGContext, index: Int, rect: CGRect, imageSize: CGSize) {
         let fontSize = max(min(imageSize.width, imageSize.height) * 0.03, 16.0)
+        let padding: CGFloat = 4
         
-        let text = "\(index)"
-        let textColor = UIColor.white
-        let backgroundColor = UIColor.systemRed
-        
-        // Calculate text size
+        let indexText = "\(index)"
         let attributes: [NSAttributedString.Key: Any] = [
             .font: UIFont.boldSystemFont(ofSize: fontSize),
-            .foregroundColor: textColor
+            .foregroundColor: UIColor.white
         ]
         
-        let attributedString = NSAttributedString(string: text, attributes: attributes)
+        let attributedString = NSAttributedString(string: indexText, attributes: attributes)
         let textSize = attributedString.size()
         
-        // Position label at top-left of bounding box, with some padding
-        let padding: CGFloat = 4
+        let labelWidth = textSize.width + padding * 2
+        let labelHeight = textSize.height + padding * 2
+        
+        // Position at top-right of bounding box
         let labelRect = CGRect(
-            x: rect.origin.x,
-            y: max(0, rect.origin.y - textSize.height - padding * 2),
-            width: textSize.width + padding * 2,
-            height: textSize.height + padding * 2
+            x: rect.origin.x + rect.width - labelWidth,
+            y: rect.origin.y - labelHeight / 2,
+            width: labelWidth,
+            height: labelHeight
         )
         
-        // Draw background rectangle for the label
-        context.setFillColor(backgroundColor.cgColor)
-        context.fill(labelRect)
+        // Draw circular background
+        context.setFillColor(UIColor.systemBlue.cgColor)
+        context.fillEllipse(in: labelRect)
         
-        // Draw text using NSString drawing (simpler than Core Graphics text)
+        // Draw text
         let textRect = CGRect(
             x: labelRect.origin.x + padding,
             y: labelRect.origin.y + padding,
             width: textSize.width,
             height: textSize.height
         )
+        indexText.draw(in: textRect, withAttributes: attributes)
+    }
+    
+    // Draw object index label (square shape)
+    private func drawObjectIndexLabel(context: CGContext, index: Int, rect: CGRect, imageSize: CGSize) {
+        let fontSize = max(min(imageSize.width, imageSize.height) * 0.03, 16.0)
+        let padding: CGFloat = 4
         
-        text.draw(in: textRect, withAttributes: attributes)
+        let indexText = "\(index)"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.boldSystemFont(ofSize: fontSize),
+            .foregroundColor: UIColor.white
+        ]
+        
+        let attributedString = NSAttributedString(string: indexText, attributes: attributes)
+        let textSize = attributedString.size()
+        
+        let labelWidth = textSize.width + padding * 2
+        let labelHeight = textSize.height + padding * 2
+        
+        // Position at top-left of bounding box (different from text labels)
+        let labelRect = CGRect(
+            x: rect.origin.x - labelWidth / 2,
+            y: rect.origin.y - labelHeight / 2,
+            width: labelWidth,
+            height: labelHeight
+        )
+        
+        // Draw square background (different from circular text labels)
+        context.setFillColor(UIColor.systemGreen.cgColor)
+        context.fill(labelRect)
+        
+        // Draw text
+        let textRect = CGRect(
+            x: labelRect.origin.x + padding,
+            y: labelRect.origin.y + padding,
+            width: textSize.width,
+            height: textSize.height
+        )
+        indexText.draw(in: textRect, withAttributes: attributes)
+    }
+
+    private func drawSensitiveDot(context: CGContext, rect: CGRect, imageSize: CGSize) {
+        // Calculate dot size based on image size
+        let dotSize = max(min(imageSize.width, imageSize.height) * 0.04, 20.0)
+        
+        // Position at top-left of bounding box
+        let dotRect = CGRect(
+            x: rect.origin.x - dotSize / 2,
+            y: rect.origin.y - dotSize / 2,
+            width: dotSize,
+            height: dotSize
+        )
+        
+        // Draw red dot with white border
+        context.setFillColor(UIColor.systemRed.cgColor)
+        context.fillEllipse(in: dotRect)
+        
+        // Add white border to make it more visible
+        context.setStrokeColor(UIColor.white.cgColor)
+        context.setLineWidth(3.0)
+        context.strokeEllipse(in: dotRect)
     }
     
     private func showAlert(title: String, message: String) {

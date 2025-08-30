@@ -11,7 +11,6 @@ OCRProcessor.swift
 Handles OCR processing for selected images with bounding box text extraction.
 */
 
-
 import UIKit
 import PhotosUI
 import Vision
@@ -24,13 +23,39 @@ struct TextBoundingBox {
     let boundingBox: CGRect
     let confidence: Float
     let assetIdentifier: String
+    var classification: ClassificationResult?
+    
+    init(text: String, boundingBox: CGRect, confidence: Float, assetIdentifier: String) {
+        self.text = text
+        self.boundingBox = boundingBox
+        self.confidence = confidence
+        self.assetIdentifier = assetIdentifier
+        self.classification = nil
+    }
+    
+    mutating func setClassification(_ classification: ClassificationResult) {
+        self.classification = classification
+    }
 }
 
 struct OCRResult {
     let assetIdentifier: String
     let textBoxes: [TextBoundingBox]
     let processingTime: TimeInterval
+    let classificationTime: TimeInterval
     let error: Error?
+    
+    var totalProcessingTime: TimeInterval {
+        return processingTime + classificationTime
+    }
+    
+    var sensitiveTextCount: Int {
+        return textBoxes.filter { $0.classification?.isSensitive == true }.count
+    }
+    
+    var hasSensitiveText: Bool {
+        return sensitiveTextCount > 0
+    }
 }
 
 // MARK: - OCR Configuration
@@ -60,6 +85,7 @@ class OCRProcessor {
     weak var delegate: OCRProcessorDelegate?
     private var isProcessing = false
     private var configuration: OCRConfiguration = .accurate
+    private let textClassificationManager = TextClassificationManager()
     
     // MARK: - Public Methods
     
@@ -83,11 +109,14 @@ class OCRProcessor {
         let imageIdentifiers = Array(selection.keys)
         delegate?.ocrProcessor(self, didStartProcessing: imageIdentifiers.count)
         
+        print("🚀 Starting OCR processing with text classification for \(imageIdentifiers.count) images")
+        
         processImagesSequentially(selection: selection, identifiers: imageIdentifiers, currentIndex: 0, results: [])
     }
     
     func cancelProcessing() {
         isProcessing = false
+        print("🛑 OCR processing cancelled")
     }
     
     // MARK: - Private Methods
@@ -99,6 +128,7 @@ class OCRProcessor {
         guard isProcessing && currentIndex < identifiers.count else {
             isProcessing = false
             if currentIndex >= identifiers.count {
+                print("🎉 OCR processing completed for all \(identifiers.count) images")
                 delegate?.ocrProcessor(self, didCompleteWithResults: results)
             }
             return
@@ -108,7 +138,13 @@ class OCRProcessor {
         delegate?.ocrProcessor(self, didProcessImage: currentIndex + 1, of: identifiers.count)
         
         guard let pickerResult = selection[identifier] else {
-            let errorResult = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: OCRError.failedToLoadImage)
+            let errorResult = OCRResult(
+                assetIdentifier: identifier,
+                textBoxes: [],
+                processingTime: 0,
+                classificationTime: 0,
+                error: OCRError.failedToLoadImage
+            )
             processNext(selection: selection, identifiers: identifiers, currentIndex: currentIndex, results: results + [errorResult])
             return
         }
@@ -125,7 +161,6 @@ class OCRProcessor {
         }
     }
     
-
     private func loadImageAndProcess(pickerResult: PHPickerResult, identifier: String, completion: @escaping (OCRResult) -> Void) {
         print("🔄 loadImageAndProcess called for \(identifier)")
         let itemProvider = pickerResult.itemProvider
@@ -134,7 +169,13 @@ class OCRProcessor {
         
         guard itemProvider.canLoadObject(ofClass: UIImage.self) else {
             print("❌ ItemProvider cannot load UIImage for \(identifier)")
-            let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: OCRError.unsupportedImageType)
+            let result = OCRResult(
+                assetIdentifier: identifier,
+                textBoxes: [],
+                processingTime: 0,
+                classificationTime: 0,
+                error: OCRError.unsupportedImageType
+            )
             completion(result)
             return
         }
@@ -151,14 +192,26 @@ class OCRProcessor {
             
             if let error = error {
                 print("❌ Error loading image for \(identifier): \(error)")
-                let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: error)
+                let result = OCRResult(
+                    assetIdentifier: identifier,
+                    textBoxes: [],
+                    processingTime: 0,
+                    classificationTime: 0,
+                    error: error
+                )
                 completion(result)
                 return
             }
             
             guard let uiImage = image as? UIImage else {
                 print("❌ Could not cast loaded object to UIImage for \(identifier)")
-                let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: OCRError.failedToLoadImage)
+                let result = OCRResult(
+                    assetIdentifier: identifier,
+                    textBoxes: [],
+                    processingTime: 0,
+                    classificationTime: 0,
+                    error: OCRError.failedToLoadImage
+                )
                 completion(result)
                 return
             }
@@ -168,14 +221,19 @@ class OCRProcessor {
         }
     }
     
-
     private func performOCR(on image: UIImage, identifier: String, completion: @escaping (OCRResult) -> Void) {
         print("🔍 performOCR called for \(identifier)")
         print("📸 Image size: \(image.size)")
         
         guard let cgImage = image.cgImage else {
             print("❌ Could not get cgImage from UIImage")
-            let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: OCRError.failedToProcessImage)
+            let result = OCRResult(
+                assetIdentifier: identifier,
+                textBoxes: [],
+                processingTime: 0,
+                classificationTime: 0,
+                error: OCRError.failedToProcessImage
+            )
             completion(result)
             return
         }
@@ -204,7 +262,13 @@ class OCRProcessor {
                 print("✅ Vision request completed successfully for \(identifier)")
             } catch {
                 print("❌ Vision request failed for \(identifier): \(error)")
-                let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: 0, error: error)
+                let result = OCRResult(
+                    assetIdentifier: identifier,
+                    textBoxes: [],
+                    processingTime: 0,
+                    classificationTime: 0,
+                    error: error
+                )
                 completion(result)
             }
         }
@@ -232,26 +296,59 @@ class OCRProcessor {
         }
     }
     
-
+    // MARK: - Text Classification
+    
+    private func classifyTextBoxes(_ textBoxes: [TextBoundingBox]) -> ([TextBoundingBox], TimeInterval) {
+        let classificationStartTime = CFAbsoluteTimeGetCurrent()
+        
+        print("🔄 Starting text classification for \(textBoxes.count) text boxes")
+        
+        let classifiedTextBoxes = textBoxes.map { textBox in
+            var mutableTextBox = textBox
+            let classification = textClassificationManager.classify(text: textBox.text)
+            mutableTextBox.setClassification(classification)
+            
+            let emoji = classification.isSensitive ? "🔴" : "🟢"
+            print("\(emoji) '\(textBox.text)' -> \(classification.predictedClass.uppercased()) (confidence: \(String(format: "%.2f", classification.confidence)), method: \(classification.method))")
+            
+            return mutableTextBox
+        }
+        
+        let classificationTime = CFAbsoluteTimeGetCurrent() - classificationStartTime
+        let sensitiveCount = classifiedTextBoxes.filter { $0.classification?.isSensitive == true }.count
+        
+        print("🎯 Classification completed: \(sensitiveCount)/\(textBoxes.count) sensitive in \(String(format: "%.1f", classificationTime * 1000))ms")
+        
+        return (classifiedTextBoxes, classificationTime)
+    }
+    
     private func handleTextRecognitionResults(request: VNRequest, error: Error?, identifier: String, startTime: CFAbsoluteTime, completion: @escaping (OCRResult) -> Void) {
         print("🔍 handleTextRecognitionResults called for \(identifier)")
-        let processingTime = CFAbsoluteTimeGetCurrent() - startTime
-        print("⏱️ Processing time: \(processingTime)s")
+        let ocrProcessingTime = CFAbsoluteTimeGetCurrent() - startTime
+        print("⏱️ OCR Processing time: \(ocrProcessingTime)s")
         
         if let error = error {
             print("❌ OCR Error in handleTextRecognitionResults: \(error)")
-            let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: processingTime, error: error)
+            let result = OCRResult(
+                assetIdentifier: identifier,
+                textBoxes: [],
+                processingTime: ocrProcessingTime,
+                classificationTime: 0,
+                error: error
+            )
             completion(result)
             return
         }
         
-        print("📊 Request results type: \(type(of: request.results))")
-        print("📊 Request results count: \(request.results?.count ?? -1)")
-        
         guard let observations = request.results as? [VNRecognizedTextObservation] else {
             print("❌ Could not cast request.results to [VNRecognizedTextObservation]")
-            print("📋 Actual results: \(request.results?.description ?? "nil")")
-            let result = OCRResult(assetIdentifier: identifier, textBoxes: [], processingTime: processingTime, error: OCRError.failedToProcessImage)
+            let result = OCRResult(
+                assetIdentifier: identifier,
+                textBoxes: [],
+                processingTime: ocrProcessingTime,
+                classificationTime: 0,
+                error: OCRError.failedToProcessImage
+            )
             completion(result)
             return
         }
@@ -261,17 +358,10 @@ class OCRProcessor {
         var textBoxes: [TextBoundingBox] = []
         
         for (index, observation) in observations.enumerated() {
-            print("📝 Processing observation \(index + 1) of \(observations.count)")
-            
-            // Get the top candidate for recognized text
             guard let topCandidate = observation.topCandidates(1).first else {
-                print("⚠️ No top candidate for observation \(index + 1)")
                 continue
             }
             
-            print("✅ Found text: '\(topCandidate.string)' (confidence: \(topCandidate.confidence))")
-            
-            // Create bounding box with the recognized text
             let textBox = TextBoundingBox(
                 text: topCandidate.string,
                 boundingBox: observation.boundingBox,
@@ -281,11 +371,26 @@ class OCRProcessor {
             textBoxes.append(textBox)
         }
         
-        print("🎉 Created \(textBoxes.count) text boxes for \(identifier)")
-        let result = OCRResult(assetIdentifier: identifier, textBoxes: textBoxes, processingTime: processingTime, error: nil)
-        print("📤 About to call completion with result")
+        print("📝 Created \(textBoxes.count) text boxes for \(identifier)")
+        
+        // Classify the extracted text
+        let (classifiedTextBoxes, classificationTime) = classifyTextBoxes(textBoxes)
+        
+        let result = OCRResult(
+            assetIdentifier: identifier,
+            textBoxes: classifiedTextBoxes,
+            processingTime: ocrProcessingTime,
+            classificationTime: classificationTime,
+            error: nil
+        )
+        
+        print("🎉 Completed processing for \(identifier):")
+        print("   - OCR: \(String(format: "%.2f", ocrProcessingTime))s")
+        print("   - Classification: \(String(format: "%.3f", classificationTime))s")
+        print("   - Total: \(String(format: "%.2f", result.totalProcessingTime))s")
+        print("   - Sensitive text regions: \(result.sensitiveTextCount)/\(result.textBoxes.count)")
+        
         completion(result)
-        print("✅ Completion called for \(identifier)")
     }
 }
 
