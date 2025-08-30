@@ -7,11 +7,10 @@ An intelligent iOS application that automatically detects and protects sensitive
 Blurify is a photo gallery app that automatically scans your images for sensitive content using on-device AI. Whenever you select photos, Blurify detects elements such as faces, documents, and license plates, then automatically blurs or encrypts those areas to keep your privacy intact. Before sharing or uploading, you can easily review flagged images and unlock or adjust the blurred areas as needed, ensuring you never accidentally overshare personal details.
 
 ## 🔧 Setup Requirements
-iOS 14.0+ for PHPickerViewController support
-Xcode 12+ for development and deployment
-Text classification & Object Detection models in Models folder
-
-Deployed on an iPhone (preferably 14 and above)
+- iOS 14.0+ for PHPickerViewController support
+- Xcode 12+ for development and deployment
+- Text classification & Object Detection models in Models folder
+- Deployed on an iPhone (preferably 14 and above)
 
 ## Getting Started
 
