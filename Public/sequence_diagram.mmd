@@ -1,0 +1,81 @@
+---
+config:
+  theme: default
+---
+sequenceDiagram
+    participant User
+    participant ViewController as ViewController
+    participant PHPicker as PHPickerViewController
+    participant OCRProcessor as OCRProcessor
+    participant ObjectProcessor as ObjectDetectionProcessor
+    participant TextClassifier as TextClassificationManager
+    participant YOLOModel as YOLOv12n Model
+    participant VisualizationVC as OCRVisualizationViewController
+    User->>ViewController: Tap "Select Photos"
+    ViewController->>PHPicker: presentPicker()
+    PHPicker->>User: Show photo selection interface
+    User->>PHPicker: Select multiple photos
+    PHPicker->>ViewController: didFinishPicking(results)
+    ViewController->>ViewController: Store selection & update UI
+    User->>ViewController: Tap "Run OCR"
+    ViewController->>ViewController: Disable button, show progress
+    par Parallel Processing
+        ViewController->>OCRProcessor: processImages(selection)
+        OCRProcessor->>OCRProcessor: didStartProcessing(totalImages)
+        OCRProcessor->>ViewController: Update progress UI
+        loop For each image
+            OCRProcessor->>OCRProcessor: loadImageAndProcess()
+            OCRProcessor->>OCRProcessor: performOCR(image)
+            Note over OCRProcessor: Vision Framework<br/>Text Recognition
+            OCRProcessor->>TextClassifier: classify(extractedText)
+            TextClassifier->>TextClassifier: Quick regex patterns
+            alt Regex Match Found
+                TextClassifier->>OCRProcessor: ClassificationResult(sensitive)
+            else No Regex Match
+                TextClassifier->>TextClassifier: ML model classification
+                TextClassifier->>OCRProcessor: ClassificationResult(prediction)
+            end
+            OCRProcessor->>ViewController: didProcessImage(index)
+        end
+        OCRProcessor->>ViewController: didCompleteWithResults(ocrResults)
+    and Object Detection Branch
+        ViewController->>ObjectProcessor: processImages(selection)
+        ObjectProcessor->>ObjectProcessor: didStartProcessing(totalImages)
+        loop For each image
+            ObjectProcessor->>ObjectProcessor: loadImageAndDetectObjects()
+            ObjectProcessor->>YOLOModel: Perform inference
+            YOLOModel->>ObjectProcessor: Raw detection results
+            ObjectProcessor->>ObjectProcessor: Apply NMS & confidence filtering
+            ObjectProcessor->>ObjectProcessor: Classify sensitivity
+            ObjectProcessor->>ViewController: didProcessImage(index)
+        end
+        ObjectProcessor->>ViewController: didCompleteWithResults(objectResults)
+    end
+    ViewController->>ViewController: handleCombinedResults()
+    ViewController->>ViewController: Calculate statistics
+    ViewController->>User: Show results alert
+    alt User chooses "View Visualization"
+        User->>ViewController: Tap "View Visualization"
+        ViewController->>VisualizationVC: Present with combined results
+        VisualizationVC->>VisualizationVC: loadAllImages()
+        VisualizationVC->>VisualizationVC: displayCurrentImage()
+        VisualizationVC->>User: Show interactive visualization
+        alt Sensitive content detected
+            VisualizationVC->>User: Show "Blur & Download" button
+            User->>VisualizationVC: Tap blur button
+            VisualizationVC->>VisualizationVC: Apply blur effects
+            VisualizationVC->>VisualizationVC: Update button to "Download"
+            User->>VisualizationVC: Tap download
+            VisualizationVC->>VisualizationVC: createBlurredImageVisualization()
+            VisualizationVC->>VisualizationVC: Save to Photos
+            VisualizationVC->>User: Show success alert
+        else No sensitive content
+            VisualizationVC->>User: Show "All's Good" message
+        end
+        User->>VisualizationVC: Tap "Done"
+        VisualizationVC->>ViewController: Dismiss visualization
+    else User chooses "OK"
+        User->>ViewController: Continue with main interface
+    end
+    ViewController->>ViewController: Re-enable OCR button
+    ViewController->>ViewController: Clear processors
