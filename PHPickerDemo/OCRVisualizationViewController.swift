@@ -162,11 +162,38 @@ class OCRVisualizationViewController: UIViewController {
         dismiss(animated: true)
     }
     
+
     @objc private func exportCurrentImage() {
-        guard currentImageIndex < ocrResults.count,
-              let image = createVisualizationImage(for: ocrResults[currentImageIndex]) else {
-            showAlert(title: "Export Error", message: "Could not create visualization image")
+        guard currentImageIndex < ocrResults.count else {
+            showAlert(title: "Export Error", message: "Could not access current image")
             return
+        }
+        
+        let result = ocrResults[currentImageIndex]
+        
+        // Check if there's any sensitive content
+        let hasSensitiveText = result.textBoxes.contains { $0.classification?.isSensitive == true }
+        let objectResult = objectDetectionResults.first { $0.assetIdentifier == result.assetIdentifier }
+        let hasSensitiveObjects = objectResult?.hasSensitiveObjects ?? false
+        
+        let image: UIImage
+        
+        if hasSensitiveText || hasSensitiveObjects {
+            // Export the blurred image (same as download)
+            image = createFinalBlurredImage(for: result)
+            
+            // Log what blur settings are applied
+            let textBlurEnabled = textBlurStates[result.assetIdentifier] ?? false
+            let objectBlurEnabled = objectBlurStates[result.assetIdentifier] ?? false
+            print("📤 Exporting image \(currentImageIndex + 1) - Text blur: \(textBlurEnabled), Object blur: \(objectBlurEnabled)")
+        } else {
+            // No sensitive content, export the visualization image (with bounding boxes)
+            guard let visualizationImage = createVisualizationImage(for: result) else {
+                showAlert(title: "Export Error", message: "Could not create visualization image")
+                return
+            }
+            image = visualizationImage
+            print("📤 Exporting visualization image \(currentImageIndex + 1) - No sensitive content")
         }
         
         let activityVC = UIActivityViewController(activityItems: [image], applicationActivities: nil)
