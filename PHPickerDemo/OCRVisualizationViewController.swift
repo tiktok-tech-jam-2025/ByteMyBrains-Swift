@@ -36,6 +36,7 @@ class OCRVisualizationViewController: UIViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        
         setupUI()
         loadAllImages()
     }
@@ -780,6 +781,7 @@ class OCRVisualizationViewController: UIViewController {
                 )
                 
                 // Use random gray colors to simulate pixelation
+                // TODO: Implement Gaussian Blur for added security (otherwise grayscale can be reversible
                 let grayValue = CGFloat.random(in: 0.7...0.9)
                 context.setFillColor(UIColor(white: grayValue, alpha: 0.9).cgColor)
                 context.fill(pixelRect)

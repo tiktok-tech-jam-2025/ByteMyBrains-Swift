@@ -8,166 +8,408 @@
 
 import Foundation
 import UIKit
+import CoreML
 
-// MARK: - Sensitive Text Category Enum
+// MARK: - PII Labels for DistilBERT
+
+struct PIILabels {
+    static let labelToId: [String: Int] = [
+        "no_pii": 0,
+        "name": 1,
+        "email": 2,
+        "phone_number": 3,
+        "ssn": 4,
+        "address": 5,
+        "login": 6
+    ]
+    
+    static let idToLabel: [Int: String] = [
+        0: "no_pii",
+        1: "name",
+        2: "email",
+        3: "phone_number",
+        4: "ssn",
+        5: "address",
+        6: "login"
+    ]
+    
+    static let allLabels = ["no_pii", "name", "email", "phone_number", "ssn", "address", "login"]
+}
+
+// MARK: - Sensitive Text Category Enum (Updated for DistilBERT)
 
 enum SensitiveTextCategory: String, CaseIterable {
-    case nric = "nric"
+    case noPii = "no_pii"
+    case name = "name"
     case email = "email"
-    case creditCard = "credit_card"
-    case phone = "phone"
-    case birthday = "birthday"
+    case phoneNumber = "phone_number"
+    case ssn = "ssn"
     case address = "address"
-    case nonSensitive = "non_sensitive"
+    case login = "login"
     
     var displayName: String {
         switch self {
-        case .nric: return "NRIC"
+        case .noPii: return "No PII"
+        case .name: return "Name"
         case .email: return "Email"
-        case .creditCard: return "Credit Card"
-        case .phone: return "Phone"
-        case .birthday: return "Birthday"
+        case .phoneNumber: return "Phone Number"
+        case .ssn: return "SSN"
         case .address: return "Address"
-        case .nonSensitive: return "Non-Sensitive"
+        case .login: return "Login"
         }
     }
     
     var color: UIColor {
         switch self {
-        case .nric: return .systemRed
+        case .noPii: return .systemGray
+        case .name: return .systemRed
         case .email: return .systemOrange
-        case .creditCard: return .systemPurple
-        case .phone: return .systemBlue
-        case .birthday: return .systemGreen
+        case .phoneNumber: return .systemGreen
+        case .ssn: return .systemPurple
         case .address: return .systemYellow
-        case .nonSensitive: return .systemGray
+        case .login: return .systemPink
         }
     }
 }
 
-// MARK: - Classification Models
+// MARK: - DistilBERT Model Info
 
-struct ModelInfo: Codable {
-    let modelType: String
-    let classes: [String]
-    let featureNames: [String]?
-    let tfidfVocabSize: Int
-    let regexFeatures: [String]?
+struct DistilBERTModelInfo: Codable {
+    let modelType: String = "DistilBERT"
+    let classes: [String] = PIILabels.allLabels
+    let maxLength: Int
+    let version: String
     
-    private enum CodingKeys: String, CodingKey {
-        case modelType = "model_type"
-        case classes
-        case featureNames = "feature_names"
-        case tfidfVocabSize = "tfidf_vocab_size"
-        case regexFeatures = "regex_features"
+    init(maxLength: Int = 128, version: String = "1.0") {
+        self.maxLength = maxLength
+        self.version = version
     }
 }
+
+// MARK: - Classification Result (Updated)
 
 struct ClassificationResult {
     let predictedClass: String
     let confidence: Double
     let allProbabilities: [String: Double]
     let processingTime: TimeInterval
-    let method: String // "regex" or "ml"
+    let method: String // "regex", "distilbert", or "fallback"
     
     var isSensitive: Bool {
-        return predictedClass != "non_sensitive"
+        return predictedClass != "no_pii"
     }
     
     var category: SensitiveTextCategory {
-        return SensitiveTextCategory(rawValue: predictedClass) ?? .nonSensitive
+        return SensitiveTextCategory(rawValue: predictedClass) ?? .noPii
     }
 }
 
-// MARK: - Model Loading Helper
+// MARK: - Tokenizer for DistilBERT
 
-class ModelLoader {
+class DistilBERTTokenizer {
+    private var vocabulary: [String: Int] = [:]
+    private var specialTokens: [String: Int] = [:]
+    private let maxLength: Int
+    private let padTokenId: Int
+    private let clsTokenId: Int
+    private let sepTokenId: Int
+    private let unkTokenId: Int
     
-    static func loadPickleData(filename: String) -> Data? {
-        guard let path = Bundle.main.path(forResource: filename, ofType: "pkl") else {
-            print("❌ Could not find \(filename).pkl in bundle")
-            return nil
+    init(maxLength: Int = 128) {
+        self.maxLength = maxLength
+        self.padTokenId = 0 // [PAD]
+        self.clsTokenId = 101 // [CLS]
+        self.sepTokenId = 102 // [SEP]
+        self.unkTokenId = 100 // [UNK]
+        
+        loadTokenizer()
+    }
+    
+    private func loadTokenizer() {
+        // Load tokenizer from your tokenizer.json file
+        guard let path = Bundle.main.path(forResource: "tokenizer", ofType: "json"),
+              let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("❌ Could not load tokenizer.json, using fallback vocabulary")
+            createFallbackVocabulary()
+            return
+        }
+        
+        // Parse vocabulary from tokenizer.json
+        if let model = json["model"] as? [String: Any],
+           let vocab = model["vocab"] as? [String: Int] {
+            self.vocabulary = vocab
+            print("✅ Loaded vocabulary with \(vocab.count) tokens")
+        } else {
+            print("⚠️ Could not parse vocabulary from tokenizer.json, using fallback")
+            createFallbackVocabulary()
+        }
+        
+        // Parse special tokens
+        if let addedTokens = json["added_tokens"] as? [[String: Any]] {
+            for token in addedTokens {
+                if let content = token["content"] as? String,
+                   let id = token["id"] as? Int {
+                    specialTokens[content] = id
+                }
+            }
+            print("✅ Loaded \(specialTokens.count) special tokens")
+        }
+    }
+    
+    private func createFallbackVocabulary() {
+        // Create a minimal vocabulary for basic functionality
+        vocabulary = [
+            "[PAD]": 0,
+            "[UNK]": 100,
+            "[CLS]": 101,
+            "[SEP]": 102,
+            "email": 1000,
+            "phone": 1001,
+            "name": 1002,
+            "address": 1003,
+            "ssn": 1004,
+            "login": 1005,
+            "@": 1010,
+            ".com": 1011,
+            "the": 1020,
+            "and": 1021,
+            "is": 1022,
+            "my": 1023,
+            "call": 1024,
+            "me": 1025
+        ]
+        print("✅ Created fallback vocabulary with \(vocabulary.count) tokens")
+    }
+    
+    func tokenize(text: String) -> [Int] {
+        let cleanText = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Simple word-piece tokenization
+        var tokens: [Int] = [clsTokenId] // Start with [CLS]
+        
+        // Combine whitespaces and punctuation character sets
+        let separatorCharacterSet = CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
+        let words = cleanText.components(separatedBy: separatorCharacterSet)
+            .filter { !$0.isEmpty }
+        
+        for word in words {
+            if let tokenId = vocabulary[word] {
+                tokens.append(tokenId)
+            } else {
+                // Handle unknown tokens
+                tokens.append(unkTokenId)
+            }
+            
+            // Stop if we're approaching max length
+            if tokens.count >= maxLength - 1 {
+                break
+            }
+        }
+        
+        // Add [SEP] token
+        tokens.append(sepTokenId)
+        
+        // Pad to max length
+        while tokens.count < maxLength {
+            tokens.append(padTokenId)
+        }
+        
+        // Truncate if necessary
+        if tokens.count > maxLength {
+            tokens = Array(tokens.prefix(maxLength - 1)) + [sepTokenId]
+        }
+        
+        return tokens
+    }
+    
+    func createAttentionMask(tokenIds: [Int]) -> [Int] {
+        return tokenIds.map { $0 != padTokenId ? 1 : 0 }
+    }
+}
+
+// MARK: - DistilBERT Model Wrapper
+
+class DistilBERTClassifier {
+    private var model: MLModel?
+    private let tokenizer: DistilBERTTokenizer
+    private let modelInfo: DistilBERTModelInfo
+
+    var isModelLoaded: Bool {
+        return model != nil
+    }
+    
+    init() {
+        self.tokenizer = DistilBERTTokenizer()
+        self.modelInfo = DistilBERTModelInfo()
+        loadModel()
+    }
+    
+    private func loadModel() {
+        // Try .mlpackage first, then .mlmodelc
+        var modelURL = Bundle.main.url(forResource: "distilbert-pii-clf-v2", withExtension: "mlpackage")
+        
+        if modelURL == nil {
+            modelURL = Bundle.main.url(forResource: "distilbert-pii-clf-v2", withExtension: "mlmodelc")
+        }
+        
+        guard let url = modelURL else {
+            print("❌ Could not find distilbert-pii-clf-v2 model in bundle")
+            print("   Looking for: distilbert-pii-clf-v2.mlpackage or distilbert-pii-clf-v2.mlmodelc")
+            return
         }
         
         do {
-            let data = try Data(contentsOf: URL(fileURLWithPath: path))
-            print("✅ Successfully loaded \(filename).pkl (\(data.count) bytes)")
-            return data
+            self.model = try MLModel(contentsOf: url)
+            print("✅ Successfully loaded DistilBERT model from: \(url.lastPathComponent)")
+            inspectModel()
         } catch {
-            print("❌ Failed to load \(filename).pkl: \(error)")
-            return nil
+            print("❌ Failed to load DistilBERT model: \(error)")
         }
     }
     
-    static func loadModelInfo() -> ModelInfo? {
-        // For now, return a mock ModelInfo since we can't easily parse pickle in Swift
-        // You could convert your model_info.pkl to JSON for easier loading
-        return ModelInfo(
-            modelType: "LogisticRegression",
-            classes: ["non_sensitive", "nric", "email", "credit_card", "phone", "birthday", "address"],
-            featureNames: nil,
-            tfidfVocabSize: 1000,
-            regexFeatures: ["nric", "email", "credit_card", "phone", "birthday", "address_keyword"]
-        )
+    private func inspectModel() {
+        guard let model = model else { return }
+        
+        print("📋 Model Description:")
+        print("   Model: \(model.modelDescription.metadata[MLModelMetadataKey.description] ?? "No description")")
+        
+        print("\n📥 Input Features:")
+        for input in model.modelDescription.inputDescriptionsByName {
+            print("   - \(input.key): \(input.value)")
+        }
+        
+        print("\n📤 Output Features:")
+        for output in model.modelDescription.outputDescriptionsByName {
+            print("   - \(output.key): \(output.value)")
+        }
+    }
+    
+    func predict(text: String) -> (String, [String: Double])? {
+        guard let model = model else {
+            print("❌ Model not loaded")
+            return nil
+        }
+        
+        // Tokenize input
+        let tokenIds = tokenizer.tokenize(text: text)
+        let attentionMask = tokenizer.createAttentionMask(tokenIds: tokenIds)
+        
+        print("🔍 Tokenized: \(tokenIds.prefix(10))... (length: \(tokenIds.count))")
+        print("🔍 Attention mask: \(attentionMask.prefix(10))... (length: \(attentionMask.count))")
+        
+        do {
+            // Try different input name variations
+            let inputVariations = [
+                ["input_ids", "attention_mask"],
+                ["inputIds", "attentionMask"],
+                ["input", "mask"]
+            ]
+            
+            var inputFeatures: MLFeatureProvider?
+            
+            for variation in inputVariations {
+                do {
+                    inputFeatures = try MLDictionaryFeatureProvider(dictionary: [
+                        variation[0]: MLMultiArray(tokenIds),
+                        variation[1]: MLMultiArray(attentionMask)
+                    ])
+                    print("✅ Using input names: \(variation)")
+                    break
+                } catch {
+                    print("⚠️ Failed with input names \(variation): \(error)")
+                    continue
+                }
+            }
+            
+            guard let features = inputFeatures else {
+                print("❌ Could not create input features with any name variation")
+                return nil
+            }
+            
+            // Make prediction
+            let prediction = try model.prediction(from: features)
+            
+            // Try different output name variations
+            let outputVariations = ["probabilities", "output", "logits", "scores", "prediction"]
+            
+            for outputName in outputVariations {
+                if let probabilities = prediction.featureValue(for: outputName)?.multiArrayValue {
+                    print("✅ Using output name: \(outputName)")
+                    return processProbabilities(probabilities)
+                }
+            }
+            
+            print("❌ Could not find output with any of these names: \(outputVariations)")
+            print("Available outputs: \(prediction.featureNames)")
+            
+        } catch {
+            print("❌ Prediction failed: \(error)")
+        }
+        
+        return nil
+    }
+    
+    private func processProbabilities(_ probabilities: MLMultiArray) -> (String, [String: Double]) {
+        var probDict: [String: Double] = [:]
+        var maxProb = 0.0
+        var predictedLabel = "no_pii"
+        
+        print("🔍 Raw probabilities shape: \(probabilities.shape)")
+        print("🔍 Raw probabilities count: \(probabilities.count)")
+        
+        for i in 0..<min(probabilities.count, PIILabels.allLabels.count) {
+            let prob = probabilities[i].doubleValue
+            let label = PIILabels.allLabels[i]
+            probDict[label] = prob
+            
+            if prob > maxProb {
+                maxProb = prob
+                predictedLabel = label
+            }
+            
+            print("   \(label): \(String(format: "%.4f", prob))")
+        }
+        
+        return (predictedLabel, probDict)
     }
 }
 
-// MARK: - Text Classification Manager
+// MARK: - Text Classification Manager (Updated)
 
 class TextClassificationManager {
     
     // Model components
-    private var modelInfo: ModelInfo?
-    private var tfidfTransformer: TFIDFTransformer?
-    private var regexExtractor: RegexFeatureExtractor?
-    private var classifier: MLClassifier?
+    private var distilBERTClassifier: DistilBERTClassifier?
     
-    // Model data
-    private var modelInfoData: Data?
-    private var tfidfData: Data?
-    private var regexData: Data?
-    private var classifierData: Data?
-    
-    // Regex patterns for quick classification
+    // Fallback regex patterns for quick classification
     private let quickRegexPatterns: [String: [NSRegularExpression]] = {
         var patterns: [String: [NSRegularExpression]] = [:]
-        
-        // NRIC patterns (Singapore)
-        patterns["nric"] = [
-            try! NSRegularExpression(pattern: "^[STFG]\\d{7}[A-Z]$", options: .caseInsensitive),
-            try! NSRegularExpression(pattern: "\\b[STFG]\\d{7}[A-Z]\\b", options: .caseInsensitive)
-        ]
         
         // Email patterns
         patterns["email"] = [
             try! NSRegularExpression(pattern: "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b", options: [])
         ]
         
-        // Credit card patterns
-        patterns["credit_card"] = [
-            try! NSRegularExpression(pattern: "\\b(?:\\d{4}[-\\s]?){3}\\d{4}\\b", options: []),
-            try! NSRegularExpression(pattern: "\\b\\d{13,19}\\b", options: [])
-        ]
-        
         // Phone patterns
-        patterns["phone"] = [
-            try! NSRegularExpression(pattern: "\\+65\\s?[689]\\d{7}", options: []),
-            try! NSRegularExpression(pattern: "\\b[689]\\d{7}\\b", options: []),
+        patterns["phone_number"] = [
+            try! NSRegularExpression(pattern: "\\+?1?[-\\s]?\\(?\\d{3}\\)?[-\\s]?\\d{3}[-\\s]?\\d{4}", options: []),
             try! NSRegularExpression(pattern: "\\b\\d{3}[-\\s]?\\d{3}[-\\s]?\\d{4}\\b", options: [])
         ]
         
-        // Birthday patterns
-        patterns["birthday"] = [
-            try! NSRegularExpression(pattern: "\\b\\d{1,2}[/-]\\d{1,2}[/-]\\d{4}\\b", options: []),
-            try! NSRegularExpression(pattern: "\\b\\d{4}[/-]\\d{1,2}[/-]\\d{1,2}\\b", options: []),
-            try! NSRegularExpression(pattern: "\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\s+\\d{1,2},?\\s+\\d{4}\\b", options: .caseInsensitive)
+        // SSN patterns
+        patterns["ssn"] = [
+            try! NSRegularExpression(pattern: "\\b\\d{3}[-\\s]?\\d{2}[-\\s]?\\d{4}\\b", options: [])
+        ]
+        
+        // Name patterns (simple)
+        patterns["name"] = [
+            try! NSRegularExpression(pattern: "\\b(my name is|i am|i'm)\\s+[A-Z][a-z]+\\s+[A-Z][a-z]+\\b", options: .caseInsensitive)
         ]
         
         // Address patterns
         patterns["address"] = [
-            try! NSRegularExpression(pattern: "\\b\\d+\\s+[A-Za-z]+\\s+(Street|St|Road|Rd|Avenue|Ave|Drive|Dr|Lane|Ln|Boulevard|Blvd)", options: .caseInsensitive),
-            try! NSRegularExpression(pattern: "\\bSingapore\\s+\\d{6}\\b", options: .caseInsensitive),
-            try! NSRegularExpression(pattern: "\\b(Block|Blk|Unit)\\s+\\d+", options: .caseInsensitive)
+            try! NSRegularExpression(pattern: "\\b\\d+\\s+[A-Za-z]+\\s+(Street|St|Road|Rd|Avenue|Ave)\\b", options: .caseInsensitive)
         ]
         
         return patterns
@@ -180,40 +422,12 @@ class TextClassificationManager {
     // MARK: - Model Loading
     
     private func loadModels() {
-        print("🔄 Loading text classification models from Models folder...")
+        print("🔄 Loading DistilBERT PII classification model...")
         
-        // Load all model files
-        modelInfoData = ModelLoader.loadPickleData(filename: "model_info")
-        tfidfData = ModelLoader.loadPickleData(filename: "tfidf_transformer")
-        regexData = ModelLoader.loadPickleData(filename: "regex_transformer")
-        classifierData = ModelLoader.loadPickleData(filename: "classifier_only")
+        // Initialize DistilBERT classifier
+        distilBERTClassifier = DistilBERTClassifier()
         
-        // Load model info (using mock data for now)
-        modelInfo = ModelLoader.loadModelInfo()
-        
-        if let modelInfo = modelInfo {
-            print("📋 Model info loaded:")
-            print("   - Model type: \(modelInfo.modelType)")
-            print("   - Classes: \(modelInfo.classes)")
-            print("   - TF-IDF vocab size: \(modelInfo.tfidfVocabSize)")
-        }
-        
-        // Check what models we have
-        let modelsAvailable = [
-            "Model Info": modelInfoData != nil,
-            "TF-IDF": tfidfData != nil,
-            "Regex": regexData != nil,
-            "Classifier": classifierData != nil
-        ]
-        
-        print("📊 Models availability:")
-        for (name, available) in modelsAvailable {
-            print("   - \(name): \(available ? "✅" : "❌")")
-        }
-        
-        // For now, we'll use regex-based classification
-        print("⚠️  Using regex-based classification (pickle parsing not implemented yet)")
-        print("💡 Regex patterns loaded for: \(quickRegexPatterns.keys.sorted())")
+        print("📊 Fallback regex patterns loaded for: \(quickRegexPatterns.keys.sorted())")
     }
     
     // MARK: - Classification Methods
@@ -224,34 +438,45 @@ class TextClassificationManager {
         
         print("🔍 Classifying text: '\(cleanText)'")
         
-        // First try quick regex patterns
+        // First try DistilBERT model
+        if let distilBERT = distilBERTClassifier,
+           let (predictedClass, probabilities) = distilBERT.predict(text: cleanText) {
+            let processingTime = CFAbsoluteTimeGetCurrent() - startTime
+            let confidence = probabilities[predictedClass] ?? 0.0
+            
+            print("✅ DistilBERT classification: \(predictedClass) (confidence: \(String(format: "%.3f", confidence))) in \(String(format: "%.1f", processingTime * 1000))ms")
+            
+            return ClassificationResult(
+                predictedClass: predictedClass,
+                confidence: confidence,
+                allProbabilities: probabilities,
+                processingTime: processingTime,
+                method: "distilbert"
+            )
+        }
+        
+        // Fallback to regex patterns
         if let regexResult = classifyWithQuickRegex(text: cleanText) {
             let processingTime = CFAbsoluteTimeGetCurrent() - startTime
-            print("✅ Regex classification: \(regexResult) in \(String(format: "%.1f", processingTime * 1000))ms")
+            print("✅ Regex fallback classification: \(regexResult) in \(String(format: "%.1f", processingTime * 1000))ms")
             
             return ClassificationResult(
                 predictedClass: regexResult,
-                confidence: 0.95,
-                allProbabilities: [regexResult: 0.95, "non_sensitive": 0.05],
+                confidence: 0.85,
+                allProbabilities: [regexResult: 0.85, "no_pii": 0.15],
                 processingTime: processingTime,
                 method: "regex"
             )
         }
         
-        // If ML models are available, use them
-        if let classifier = classifier,
-           let tfidfTransformer = tfidfTransformer {
-            return classifyWithML(text: cleanText, startTime: startTime)
-        }
-        
-        // Fallback to non-sensitive
+        // Final fallback
         let processingTime = CFAbsoluteTimeGetCurrent() - startTime
-        print("ℹ️ No classification match, defaulting to non-sensitive")
+        print("ℹ️ No classification match, defaulting to no_pii")
         
         return ClassificationResult(
-            predictedClass: "non_sensitive",
+            predictedClass: "no_pii",
             confidence: 0.8,
-            allProbabilities: ["non_sensitive": 0.8],
+            allProbabilities: ["no_pii": 0.8],
             processingTime: processingTime,
             method: "fallback"
         )
@@ -269,80 +494,104 @@ class TextClassificationManager {
         return nil
     }
     
-    private func classifyWithML(text: String, startTime: CFAbsoluteTime) -> ClassificationResult {
-        // This would use your loaded ML models
-        // For now, return a placeholder
-        let processingTime = CFAbsoluteTimeGetCurrent() - startTime
-        
-        return ClassificationResult(
-            predictedClass: "non_sensitive",
-            confidence: 0.7,
-            allProbabilities: ["non_sensitive": 0.7],
-            processingTime: processingTime,
-            method: "ml"
-        )
-    }
-    
     func classifyBatch(texts: [String]) -> [ClassificationResult] {
         return texts.map { classify(text: $0) }
+    }
+    
+    // MARK: - Testing Methods
+    
+    func testModel() {
+        print("\n🧪 Testing DistilBERT model integration...")
+        print("=" * 50)
+        
+        let testCases = [
+            "My email is john.doe@example.com",
+            "Call me at 555-123-4567",
+            "My name is John Smith",
+            "SSN: 123-45-6789",
+            "I live at 123 Main Street",
+            "Username: admin, Password: secret123",
+            "This is just normal text",
+            "Contact info: jane@company.org",
+            "Phone: (555) 987-6543",
+            "My address is 456 Oak Avenue"
+        ]
+        
+        for (index, testText) in testCases.enumerated() {
+            print("\n📝 Test \(index + 1): '\(testText)'")
+            print("-" * 40)
+            
+            let result = classify(text: testText)
+            
+            print("   → \(result.predictedClass) (confidence: \(String(format: "%.3f", result.confidence)))")
+            print("   → Method: \(result.method), Time: \(String(format: "%.1f", result.processingTime * 1000))ms")
+            print("   → Is Sensitive: \(result.isSensitive)")
+            print("   → Category: \(result.category.displayName)")
+            
+            // Show top 3 predictions if we have probabilities
+            if result.allProbabilities.count > 1 {
+                let sortedProbs = result.allProbabilities.sorted { $0.value > $1.value }
+                print("   → Top predictions:")
+                for (label, prob) in sortedProbs.prefix(3) {
+                    print("     - \(label): \(String(format: "%.3f", prob))")
+                }
+            }
+        }
+        
+        print("\n" + "=" * 50)
+        print("🏁 Testing complete!")
     }
     
     // MARK: - Utility Methods
     
     func getModelStatus() -> [String: Any] {
+        let hasDistilBERT = distilBERTClassifier?.isModelLoaded ?? false
+        
         return [
+            "distilbert_loaded": hasDistilBERT,
+            "distilbert_available": distilBERTClassifier != nil,
             "regex_patterns_loaded": !quickRegexPatterns.isEmpty,
             "regex_categories": Array(quickRegexPatterns.keys),
-            "model_info_available": modelInfo != nil,
-            "tfidf_data_loaded": tfidfData != nil,
-            "regex_data_loaded": regexData != nil,
-            "classifier_data_loaded": classifierData != nil,
-            "classes": modelInfo?.classes ?? []
+            "pii_labels": PIILabels.allLabels,
+            "model_type": "DistilBERT",
+            "fallback_available": true
         ]
     }
-}
-
-// MARK: - Placeholder classes for ML components
-// These will be implemented when we load the actual models
-
-class TFIDFTransformer {
-    private let data: Data
     
-    init(data: Data) {
-        self.data = data
-        // TODO: Parse pickle data and implement TF-IDF transformation
-    }
-    
-    func transform(text: String) -> [Double] {
-        // Placeholder implementation
-        return Array(repeating: 0.0, count: 1000)
+    func printModelStatus() {
+        print("\n📊 Model Status Report")
+        print("=" * 30)
+        
+        let status = getModelStatus()
+        for (key, value) in status {
+            print("   \(key): \(value)")
+        }
+        print("=" * 30)
     }
 }
 
-class RegexFeatureExtractor {
-    private let data: Data
-    
-    init(data: Data) {
-        self.data = data
-        // TODO: Parse pickle data and implement regex feature extraction
+// MARK: - MLMultiArray Extension for convenience
+
+extension MLMultiArray {
+    convenience init(_ array: [Int]) {
+        try! self.init(shape: [1, NSNumber(value: array.count)], dataType: .int32)
+        for (index, value) in array.enumerated() {
+            self[[0, NSNumber(value: index)]] = NSNumber(value: value)
+        }
     }
     
-    func extractFeatures(text: String) -> [Double] {
-        // Placeholder implementation
-        return Array(repeating: 0.0, count: 6)
+    convenience init(_ array: [Double]) {
+        try! self.init(shape: [1, NSNumber(value: array.count)], dataType: .double)
+        for (index, value) in array.enumerated() {
+            self[[0, NSNumber(value: index)]] = NSNumber(value: value)
+        }
     }
 }
 
-class MLClassifier {
-    private let data: Data
-    
-    init(data: Data) {
-        self.data = data
-        // TODO: Parse pickle data and implement classification
-    }
-    
-    func predict(features: [Double]) -> (String, [String: Double]) {
-        // Placeholder implementation
-        return ("non_sensitive", ["non_sensitive": 0.8])
+// MARK: - String Extension for repeat
+
+extension String {
+    static func * (string: String, times: Int) -> String {
+        return String(repeating: string, count: times)
     }
 }
