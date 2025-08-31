@@ -49,6 +49,7 @@
 				model_info.pkl,
 				regex_transformer.pkl,
 				tfidf_transformer.pkl,
+				tokenizer.json,
 			);
 			target = 261C3FA42481C140005A1EFD /* PHPickerDemo */;
 		};
@@ -59,6 +60,7 @@
 			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
 			buildPhase = 261C3FA32481C140005A1EFD /* Resources */;
 			membershipExceptions = (
+				"distilbert-pii-clf-v2.mlpackage",
 				yolo12n.mlpackage,
 			);
 		};
